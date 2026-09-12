@@ -5,9 +5,12 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
+from django.forms import modelform_factory
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+
+from core.validators import human_size, validate_image_upload, validate_upload_size
 
 from .models import Category, Comment, DownloadLink, Favorite, Resource, Tag, UpdateLog
 
@@ -67,6 +70,117 @@ class DownloadLinkTests(TestCase):
         )
         response = self.client.get(reverse("resources:download", args=[link.pk]))
         self.assertEqual(response.status_code, 404)
+
+
+class UploadValidationTests(TestCase):
+    """
+    上传体积与类型校验。
+
+    背景：MAX_UPLOAD_SIZE_MB 一度只是个「被读进 settings 但没人用」的环境变量，
+    配了等于没配。这组测试把「真正生效」这件事锁住：
+    既直接测校验器，也断言字段确实挂上了校验器、且走真实表单提交会被拦下。
+    """
+
+    def setUp(self):
+        self.resource = Resource.objects.create(title="上传校验测试资源")
+
+    # ---- 体积上限 ----
+
+    def test_oversized_upload_is_rejected(self):
+        with override_settings(MAX_UPLOAD_SIZE_MB=1):
+            big = SimpleUploadedFile("big.bin", b"x" * (2 * 1024 * 1024))
+            with self.assertRaises(ValidationError) as ctx:
+                validate_upload_size(big)
+            self.assertIn("超过上限", str(ctx.exception))
+            self.assertIn("2.0 MB", str(ctx.exception))
+            self.assertIn("1.0 MB", str(ctx.exception))
+
+    def test_upload_within_limit_passes(self):
+        with override_settings(MAX_UPLOAD_SIZE_MB=1):
+            validate_upload_size(SimpleUploadedFile("small.bin", b"x" * (512 * 1024)))
+
+    def test_limit_is_read_from_settings_at_call_time(self):
+        """改配置应当立刻生效，而不是被 import 时的常量锁死。"""
+        upload = SimpleUploadedFile("mid.bin", b"x" * (2 * 1024 * 1024))
+        with override_settings(MAX_UPLOAD_SIZE_MB=1):
+            with self.assertRaises(ValidationError):
+                validate_upload_size(upload)
+        with override_settings(MAX_UPLOAD_SIZE_MB=10):
+            validate_upload_size(upload)
+
+    def test_none_and_sizeless_values_are_ignored(self):
+        validate_upload_size(None)
+        validate_upload_size("not-a-file")
+
+    # ---- 图片类型白名单 ----
+
+    def test_image_extension_whitelist(self):
+        for name in ("cover.png", "cover.JPG", "cover.webp", "cover.gif", "cover.bmp"):
+            validate_image_upload(SimpleUploadedFile(name, b"data"))
+
+    def test_non_image_rejected(self):
+        for name in ("payload.exe", "script.php", "archive.zip", "note.txt"):
+            with self.assertRaises(ValidationError):
+                validate_image_upload(SimpleUploadedFile(name, b"data"))
+
+    def test_svg_rejected_because_it_can_carry_scripts(self):
+        """SVG 可内嵌 script，且 media 与站点同源，因此必须挡掉。"""
+        with self.assertRaises(ValidationError):
+            validate_image_upload(SimpleUploadedFile("evil.svg", b"<svg/>"))
+
+    def test_image_upload_also_checks_size(self):
+        with override_settings(MAX_UPLOAD_SIZE_MB=1):
+            big = SimpleUploadedFile("big.png", b"x" * (2 * 1024 * 1024))
+            with self.assertRaises(ValidationError):
+                validate_image_upload(big)
+
+    # ---- 校验器真的挂在字段上 ----
+
+    def test_model_fields_actually_carry_the_validators(self):
+        self.assertIn(
+            validate_upload_size, DownloadLink._meta.get_field("file").validators
+        )
+        self.assertIn(
+            validate_image_upload, Resource._meta.get_field("cover_image").validators
+        )
+        self.assertIn(
+            validate_image_upload, User._meta.get_field("avatar").validators
+        )
+
+    # ---- 走真实表单提交（管理员上传走的就是这条路）----
+
+    def test_upload_through_model_form_is_blocked(self):
+        form_class = modelform_factory(
+            DownloadLink, fields=["resource", "label", "link_type", "file"]
+        )
+        with override_settings(MAX_UPLOAD_SIZE_MB=1):
+            form = form_class(
+                data={
+                    "resource": self.resource.pk,
+                    "label": "本地直链",
+                    "link_type": DownloadLink.LOCAL,
+                },
+                files={"file": SimpleUploadedFile("big.bin", b"x" * (2 * 1024 * 1024))},
+            )
+            self.assertFalse(form.is_valid())
+            self.assertIn("file", form.errors)
+
+    def test_avatar_form_rejects_svg(self):
+        form_class = modelform_factory(User, fields=["avatar"])
+        form = form_class(
+            files={"avatar": SimpleUploadedFile("evil.svg", b"<svg/>")}
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("avatar", form.errors)
+
+    # ---- 体积格式化 ----
+
+    def test_human_size(self):
+        self.assertEqual(human_size(0), "0 B")
+        self.assertEqual(human_size(512), "512 B")
+        self.assertEqual(human_size(1024), "1.0 KB")
+        self.assertEqual(human_size(12_345_678), "11.8 MB")
+        self.assertEqual(human_size(3 * 1024**3), "3.0 GB")
 
 
 class ResourceViewTests(TestCase):

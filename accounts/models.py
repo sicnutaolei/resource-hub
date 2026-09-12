@@ -2,6 +2,8 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.urls import reverse
 
+from core.validators import validate_image_upload
+
 
 class User(AbstractUser):
     """
@@ -12,7 +14,13 @@ class User(AbstractUser):
     """
 
     nickname = models.CharField("昵称", max_length=50, blank=True)
-    avatar = models.ImageField("头像", upload_to="avatars/%Y/%m/", blank=True, null=True)
+    avatar = models.ImageField(
+        "头像",
+        upload_to="avatars/%Y/%m/",
+        blank=True,
+        null=True,
+        validators=[validate_image_upload],
+    )
     bio = models.CharField("一句话简介", max_length=200, blank=True)
 
     class Meta:

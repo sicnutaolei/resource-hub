@@ -4,6 +4,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 
+from core.validators import human_size, validate_image_upload, validate_upload_size
+
 
 def unique_slugify(instance, value: str, slug_field: str = "slug") -> str:
     """
@@ -111,7 +113,11 @@ class Resource(models.Model):
     )
     version = models.CharField("当前版本", max_length=60, blank=True)
     cover_image = models.ImageField(
-        "封面图", upload_to="covers/%Y/%m/", blank=True, null=True
+        "封面图",
+        upload_to="covers/%Y/%m/",
+        blank=True,
+        null=True,
+        validators=[validate_image_upload],
     )
 
     is_published = models.BooleanField("已发布", default=True)
@@ -197,6 +203,7 @@ class DownloadLink(models.Model):
         blank=True,
         null=True,
         help_text="link_type=本地文件 时必填",
+        validators=[validate_upload_size],
     )
     url = models.URLField(
         "外链地址",
@@ -244,16 +251,7 @@ class DownloadLink(models.Model):
 
     @property
     def size_display(self) -> str:
-        size = self.file_size
-        if not size:
-            return ""
-        units = ["B", "KB", "MB", "GB", "TB"]
-        value = float(size)
-        for unit in units:
-            if value < 1024 or unit == units[-1]:
-                return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
-            value /= 1024
-        return ""
+        return human_size(self.file_size) if self.file_size else ""
 
     def bump_downloads(self):
         DownloadLink.objects.filter(pk=self.pk).update(

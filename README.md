@@ -30,6 +30,7 @@
 - **收藏与评论**：登录用户可用，评论支持管理员隐藏
 - **外链失效检查**：后台批量检测 + 命令行 `check_links`，默认只出报告，加 `--apply` 才写库
 - **浏览量 / 下载量统计**：用 `F()` 表达式自增，避免并发读改写竞态
+- **上传校验**：单文件体积上限 + 图片格式白名单（挡掉可执行脚本的 SVG）
 - **健康检查**：`/healthz` 供容器编排与监控使用
 
 ## 目录结构
@@ -42,7 +43,7 @@ resource-hub/
 │   ├── context_processors.py   侧栏分类与标签注入全站
 │   ├── utils.py                外链探测（仅用标准库 urllib）
 │   └── management/commands/    check_links.py（外链检测）、seed_demo.py（演示数据）
-├── core/                   站点功能：关于、健康检查、robots、ensure_admin 命令
+├── core/                   站点功能：关于、健康检查、robots、上传校验、ensure_admin 命令
 ├── templates/              全部模板
 ├── static/css/             tokens.css（设计变量）+ main.css
 ├── static/js/              theme.js（主题）+ main.js（交互）
@@ -199,8 +200,12 @@ python manage.py test
 **提交表单报 CSRF 错误**
 用域名访问时把 `CSRF_TRUSTED_ORIGINS=https://你的域名` 加进 `.env`。
 
-**上传大文件失败**
-`.env` 里的 `MAX_UPLOAD_SIZE_MB` 只是记录用途，实际限制还受 nginx / 网关的 `client_max_body_size` 影响。大文件建议走网盘外链。
+**上传大文件被拒**
+`.env` 里的 `MAX_UPLOAD_SIZE_MB`（默认 2048，即 2GB）是**单文件硬上限**，在模型层校验，超过会直接报错。改大它之前先确认磁盘够用。
+另外如果前面挂了 nginx 或飞牛网关，还要看它的 `client_max_body_size`，否则请求在到达 Django 之前就被拦了。大文件建议走网盘外链。
+
+**封面图传不上去，提示格式不允许**
+只接受 `jpg / jpeg / png / webp / gif / bmp`。**SVG 是故意挡掉的**——SVG 可以内嵌 `<script>`，而本站的 media 与站点同源，直接打开上传的 SVG 会执行其中的脚本，等于给自己开后门。需要矢量图请先转成 PNG。
 
 **本地文件的下载速度慢**
 默认由 Django（gunicorn）提供 `/media/` 与下载流。如果前置了 nginx，把 `SERVE_MEDIA=False` 并在 nginx 里直接 `location /media/ { alias ...; }`，性能更好。
