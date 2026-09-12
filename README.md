@@ -41,7 +41,7 @@ resource-hub/
 ├── resources/              核心业务：分类/标签/资源/下载链接/更新日志/评论/收藏
 │   ├── context_processors.py   侧栏分类与标签注入全站
 │   ├── utils.py                外链探测（仅用标准库 urllib）
-│   └── management/commands/check_links.py
+│   └── management/commands/    check_links.py（外链检测）、seed_demo.py（演示数据）
 ├── core/                   站点功能：关于、健康检查、robots、ensure_admin 命令
 ├── templates/              全部模板
 ├── static/css/             tokens.css（设计变量）+ main.css
@@ -167,7 +167,20 @@ python manage.py ensure_admin
 python manage.py runserver 8082
 ```
 
-运行测试（37 个用例）：
+### 灌入演示数据
+
+想先看看界面效果再录真实资源，可以灌一批示例数据：
+
+```bash
+python manage.py seed_demo            # 12 条示例资源 + 分类 + 标签 + 下载链接 + 更新日志 + 评论
+python manage.py seed_demo --reset    # 先清空已有资源再灌
+```
+
+演示账号是 `demo` / `demo12345`，它会自动收藏全部示例资源，方便你验证个人中心。
+
+这个命令在生产环境（`DEBUG=False`）默认拒绝执行，避免误操作污染真实数据；确实需要时加 `--force`。
+
+### 运行测试
 
 ```bash
 python manage.py test
