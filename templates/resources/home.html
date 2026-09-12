@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block content %}
+  <section class="hero">
+    <div class="hero__inner">
+      <span class="hero__eyebrow">干净 · 无捆绑 · 持续更新</span>
+      <h1>{{ site_name }}，把好用的软件挑出来</h1>
+      <p>{{ site_subtitle }}。资源优先提供本地直链，体积较大的走网盘外链，并标注提取码。</p>
+
+      <form class="hero__search" action="{% url 'resources:list' %}" method="get" role="search">
+        <label class="sr-only" for="hero-q">搜索资源</label>
+        <input id="hero-q" type="search" name="q" placeholder="输入软件名，比如「解压」「播放器」…" autocomplete="off">
+        <button class="btn btn--primary btn--lg" type="submit">搜索</button>
+      </form>
+
+      <div class="hero__stats">
+        <div class="hero__stat"><b>{{ stats.resources }}</b><span>已收录资源</span></div>
+        <div class="hero__stat"><b>{{ stats.categories }}</b><span>个分类</span></div>
+        <div class="hero__stat"><b>{{ stats.logs }}</b><span>条更新记录</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="layout">
+    {% include "resources/partials/sidebar.html" %}
+
+    <div>
+      {% if pinned_resources %}
+        <section class="section">
+          <div class="section__head">
+            <h2 class="section__title">站长推荐</h2>
+          </div>
+          <div class="grid">
+            {% for resource in pinned_resources %}
+              {% include "resources/partials/card.html" %}
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+
+      <section class="section">
+        <div class="section__head">
+          <div>
+            <h2 class="section__title">最新收录</h2>
+            <p class="section__desc">共 {{ page_obj.paginator.count }} 个资源</p>
+          </div>
+          <a class="btn btn--sm" href="{% url 'resources:list' %}">查看全部</a>
+        </div>
+
+        {% if page_obj.object_list %}
+          <div class="grid">
+            {% for resource in page_obj.object_list %}
+              {% include "resources/partials/card.html" %}
+            {% endfor %}
+          </div>
+          {% include "resources/partials/pagination.html" %}
+        {% else %}
+          <div class="empty">
+            <div class="empty__icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 7h18v12H3z"/><path d="M3 7l2-3h14l2 3"/></svg>
+            </div>
+            <h3>还没有已发布的资源</h3>
+            <p>登录管理后台添加第一个资源吧。</p>
+            {% if user.is_staff %}
+              <a class="btn btn--primary" href="{% url 'admin:resources_resource_add' %}">去添加资源</a>
+            {% endif %}
+          </div>
+        {% endif %}
+      </section>
+
+      {% if recent_logs %}
+        <section class="section">
+          <div class="section__head">
+            <h2 class="section__title">最近更新</h2>
+            <a class="btn btn--sm" href="{% url 'resources:changelog' %}">全部日志</a>
+          </div>
+          <div class="panel">
+            <div class="timeline">
+              {% for log in recent_logs %}
+                <div class="timeline__item">
+                  <div class="timeline__head">
+                    <a class="timeline__version" href="{{ log.resource.get_absolute_url }}">{{ log.version }}</a>
+                    <a href="{{ log.resource.get_absolute_url }}">{{ log.resource.title }}</a>
+                    <span class="timeline__date">{{ log.created_at|naturaltime }}</span>
+                  </div>
+                  <ul class="timeline__lines">
+                    {% for line in log.lines %}
+                      <li>{{ line }}</li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </section>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

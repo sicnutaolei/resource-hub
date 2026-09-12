@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}编辑资料{% endblock %}
+
+{% block content %}
+  <div class="form-narrow">
+    <nav class="breadcrumb" aria-label="面包屑">
+      <a href="{% url 'accounts:profile' %}">个人中心</a>
+      <span>/</span>
+      <span>编辑资料</span>
+    </nav>
+
+    <div class="form-card">
+      <div class="form-card__head">
+        <h1>编辑资料</h1>
+        <p>昵称和头像会显示在你的评论旁</p>
+      </div>
+
+      <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+          <div class="form-errors">
+            {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+          </div>
+        {% endif %}
+
+        {% for field in form %}
+          <div class="field">
+            <label class="field__label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="field__help">{{ field.help_text }}</div>{% endif %}
+            {% if field.errors %}<div class="field__error">{{ field.errors.0 }}</div>{% endif %}
+          </div>
+        {% endfor %}
+
+        <div style="display:flex;gap:var(--space-2)">
+          <button class="btn btn--primary" type="submit">保存</button>
+          <a class="btn" href="{% url 'accounts:profile' %}">取消</a>
+        </div>
+      </form>
+
+      <div class="form-foot">
+        用户名 @{{ user.username }} 不可修改
+      </div>
+    </div>
+  </div>
+{% endblock %}

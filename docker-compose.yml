@@ -1,0 +1,27 @@
+services:
+  web:
+    build: .
+    image: resource-hub:latest
+    container_name: resource-hub
+    restart: unless-stopped
+    ports:
+      # 宿主机端口:容器端口。改宿主机端口只改左边，容器内固定 8082
+      - "8082:8082"
+    env_file:
+      - .env
+    environment:
+      TZ: Asia/Shanghai
+      PORT: "8082"
+    volumes:
+      # 数据库文件。容器重建后数据仍在，务必保留这两个挂载
+      - ./data:/app/data
+      # 上传的封面图与本地小文件
+      - ./media:/app/media
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8082/healthz', timeout=5).status == 200 else 1)\""
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

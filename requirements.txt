@@ -1,0 +1,5 @@
+# 运行时依赖（版本已在 Python 3.13 + Django 5.2 LTS 下验证通过）
+Django==5.2.17
+gunicorn==26.2.0
+whitenoise==6.12.0
+Pillow==12.3.0

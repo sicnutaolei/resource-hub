@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% load site_tags %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+  <nav class="breadcrumb" aria-label="面包屑">
+    <a href="{% url 'resources:home' %}">首页</a>
+    <span>/</span>
+    {% if category %}
+      <span>{{ category.name }}</span>
+    {% elif tag %}
+      <span>标签</span>
+      <span>/</span>
+      <span>{{ tag.name }}</span>
+    {% elif query %}
+      <span>搜索</span>
+    {% else %}
+      <span>全部资源</span>
+    {% endif %}
+  </nav>
+
+  <div class="layout">
+    {% include "resources/partials/sidebar.html" %}
+
+    <div>
+      <div class="toolbar">
+        <span class="toolbar__info">
+          {% if query %}
+            「<b>{{ query }}</b>」的搜索结果：<b>{{ total_count }}</b> 个
+          {% else %}
+            共 <b>{{ total_count }}</b> 个资源
+          {% endif %}
+        </span>
+        <div class="toolbar__group">
+          {% for key, option in sort_options.items %}
+            <a href="{% url_with sort=key page='' %}" class="{% if sort == key %}active{% endif %}">{{ option.0 }}</a>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if category.description %}
+        <div class="notice" style="margin-bottom:var(--space-4)">
+          <span aria-hidden="true">i</span>
+          <span>{{ category.description }}</span>
+        </div>
+      {% endif %}
+
+      {% if page_obj.object_list %}
+        <div class="grid">
+          {% for resource in page_obj.object_list %}
+            {% include "resources/partials/card.html" %}
+          {% endfor %}
+        </div>
+        {% include "resources/partials/pagination.html" %}
+      {% else %}
+        <div class="empty">
+          <div class="empty__icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          </div>
+          <h3>没有找到匹配的资源</h3>
+          <p>换个关键词试试，或者从左侧分类浏览。</p>
+          <a class="btn" href="{% url 'resources:list' %}">查看全部资源</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}关于本站{% endblock %}
+
+{% block content %}
+  <nav class="breadcrumb" aria-label="面包屑">
+    <a href="{% url 'resources:home' %}">首页</a>
+    <span>/</span>
+    <span>关于本站</span>
+  </nav>
+
+  <div class="layout">
+    {% include "resources/partials/sidebar.html" %}
+
+    <div>
+      <div class="panel" style="margin-bottom:var(--space-5)">
+        <h2 class="section__title" style="margin-bottom:var(--space-3)">关于 {{ site_name }}</h2>
+        <div class="prose">这里收录站长亲测可用的纯净软件与工具：没有捆绑安装包，没有全家桶，没有改主页。
+
+每个资源都会写清楚版本号、本版特点和更新日志。能直链的走服务器本地下载，体积大的走网盘外链，并注明提取码。
+
+资源全部来自官方或可信来源，仅供学习交流使用，请勿用于商业用途。如有侵权，请联系站长删除。</div>
+
+        <div class="hero__stats" style="margin-top:var(--space-5)">
+          <div class="hero__stat"><b>{{ stats.resources }}</b><span>已收录资源</span></div>
+          <div class="hero__stat"><b>{{ stats.categories }}</b><span>个分类</span></div>
+          <div class="hero__stat"><b>{{ stats.logs }}</b><span>条更新记录</span></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:var(--space-5)">
+        <h2 class="section__title" style="margin-bottom:var(--space-3)">下载说明</h2>
+        <ul class="spec-list" style="gap:var(--space-3)">
+          <li><span>本地直链</span><span>直接点击下载，速度快，不会失效</span></li>
+          <li><span>网盘外链</span><span>需跳转第三方网盘，建议先转存再下载</span></li>
+          <li><span>链接失效</span><span>在资源页留言，站长会尽快补档</span></li>
+        </ul>
+      </div>
+
+      <div class="panel">
+        <h2 class="section__title" style="margin-bottom:var(--space-3)">技术信息</h2>
+        <ul class="spec-list" style="gap:var(--space-3)">
+          <li><span>后端</span><span>Django + SQLite</span></li>
+          <li><span>部署</span><span>Docker 容器，媒体文件挂载为数据卷</span></li>
+          <li><span>主题</span><span>支持浅色 / 深色 / 跟随系统三态切换</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}服务器错误{% endblock %}
+
+{% block content %}
+  <div class="empty" style="padding-top:var(--space-12)">
+    <div class="empty__icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 4.3 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z"/></svg>
+    </div>
+    <h3>500 · 服务器开小差了</h3>
+    <p>请稍后再试。如果持续出现，请联系站长。</p>
+    <a class="btn btn--primary" href="/">回到首页</a>
+  </div>
+{% endblock %}

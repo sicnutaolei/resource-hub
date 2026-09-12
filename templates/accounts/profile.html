@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% load humanize site_tags %}
+
+{% block title %}个人中心{% endblock %}
+
+{% block content %}
+  <div class="profile-head">
+    {% if user.avatar %}
+      <img class="avatar avatar--lg" src="{{ user.avatar.url }}" alt="{{ user.display_name }}">
+    {% else %}
+      <span class="avatar avatar--lg">{{ user.initial }}</span>
+    {% endif %}
+    <div>
+      <h1 class="profile-head__name">{{ user.display_name }}</h1>
+      <p class="profile-head__sub">
+        @{{ user.username }}
+        {% if user.bio %} · {{ user.bio }}{% endif %}
+      </p>
+      <p class="profile-head__sub">注册于 {{ user.date_joined|date:"Y-m-d" }}{% if user.is_staff %} · 管理员{% endif %}</p>
+    </div>
+    <div class="profile-head__actions">
+      <a class="btn" href="{% url 'accounts:profile_edit' %}">编辑资料</a>
+      <a class="btn" href="{% url 'accounts:password_change' %}">修改密码</a>
+      {% if user.is_staff %}<a class="btn btn--primary" href="{% url 'admin:index' %}">管理后台</a>{% endif %}
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <a class="{% if tab != 'comments' %}active{% endif %}" href="{% url 'accounts:profile' %}?tab=favorites">我的收藏（{{ favorite_list|length }}）</a>
+    <a class="{% if tab == 'comments' %}active{% endif %}" href="{% url 'accounts:profile' %}?tab=comments">我的评论（{{ comment_list|length }}）</a>
+  </nav>
+
+  {% if tab == 'comments' %}
+    {% if comment_list %}
+      <div class="row-list">
+        {% for comment in comment_list %}
+          <div class="row-item">
+            <div class="row-item__main">
+              <div class="row-item__title">
+                <a href="{{ comment.resource.get_absolute_url }}">{{ comment.resource.title }}</a>
+              </div>
+              <div class="row-item__sub">{{ comment.content|truncatechars:60 }}</div>
+              <div class="row-item__sub">{{ comment.created_at|naturaltime }}{% if not comment.is_active %} · 已被管理员隐藏{% endif %}</div>
+            </div>
+            <a class="btn btn--sm" href="{{ comment.resource.get_absolute_url }}#comments">查看</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty">
+        <h3>还没有发表过评论</h3>
+        <p>去资源页看看，说点什么吧。</p>
+        <a class="btn btn--primary" href="{% url 'resources:list' %}">浏览资源</a>
+      </div>
+    {% endif %}
+  {% else %}
+    {% if favorite_list %}
+      <div class="row-list">
+        {% for favorite in favorite_list %}
+          <div class="row-item">
+            <span class="mini-item__cover" style="{{ favorite.resource|cover_style }}">
+              {% if favorite.resource.cover_image %}
+                <img src="{{ favorite.resource.cover_image.url }}" alt="">
+              {% else %}
+                {{ favorite.resource.title|slice:":1" }}
+              {% endif %}
+            </span>
+            <div class="row-item__main">
+              <div class="row-item__title">
+                <a href="{{ favorite.resource.get_absolute_url }}">{{ favorite.resource.title }}</a>
+              </div>
+              <div class="row-item__sub">
+                {% if favorite.resource.category %}{{ favorite.resource.category.name }} · {% endif %}
+                收藏于 {{ favorite.created_at|naturaltime }}
+              </div>
+            </div>
+            <a class="btn btn--sm" href="{{ favorite.resource.get_absolute_url }}">打开</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty">
+        <h3>收藏夹是空的</h3>
+        <p>在资源详情页点「收藏」，下次找起来更方便。</p>
+        <a class="btn btn--primary" href="{% url 'resources:list' %}">浏览资源</a>
+      </div>
+    {% endif %}
+  {% endif %}
+{% endblock %}

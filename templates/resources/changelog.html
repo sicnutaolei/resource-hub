@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+  <nav class="breadcrumb" aria-label="面包屑">
+    <a href="{% url 'resources:home' %}">首页</a>
+    <span>/</span>
+    <span>更新日志</span>
+  </nav>
+
+  <div class="layout">
+    {% include "resources/partials/sidebar.html" %}
+
+    <div>
+      <div class="toolbar">
+        <span class="toolbar__info">全站共 <b>{{ page_obj.paginator.count }}</b> 条更新记录</span>
+      </div>
+
+      {% if page_obj.object_list %}
+        <div class="panel">
+          <div class="timeline">
+            {% for log in page_obj.object_list %}
+              <div class="timeline__item">
+                <div class="timeline__head">
+                  <a class="timeline__version" href="{{ log.resource.get_absolute_url }}">{{ log.version }}</a>
+                  <a href="{{ log.resource.get_absolute_url }}"><b>{{ log.resource.title }}</b></a>
+                  {% if log.resource.category %}
+                    <span class="card__cat">{{ log.resource.category.name }}</span>
+                  {% endif %}
+                  <span class="timeline__date">{{ log.created_at|date:"Y-m-d H:i" }}</span>
+                </div>
+                <ul class="timeline__lines">
+                  {% for line in log.lines %}
+                    <li>{{ line }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% include "resources/partials/pagination.html" %}
+      {% else %}
+        <div class="empty">
+          <div class="empty__icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 8v5l3 2"/><circle cx="12" cy="12" r="9"/></svg>
+          </div>
+          <h3>还没有更新记录</h3>
+          <p>在资源详情里添加更新日志后，这里会自动汇总。</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

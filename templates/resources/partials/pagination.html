@@ -1,0 +1,26 @@
+{% load site_tags %}
+{% if page_obj.paginator.num_pages > 1 %}
+  <nav class="pagination" aria-label="分页">
+    {% if page_obj.has_previous %}
+      <a href="{% url_with page=page_obj.previous_page_number %}" rel="prev">上一页</a>
+    {% else %}
+      <span class="disabled">上一页</span>
+    {% endif %}
+
+    {% for number in page_obj.paginator.get_elided_page_range %}
+      {% if number == page_obj.paginator.ELLIPSIS %}
+        <span class="ellipsis">…</span>
+      {% elif number == page_obj.number %}
+        <span class="current" aria-current="page">{{ number }}</span>
+      {% else %}
+        <a href="{% url_with page=number %}">{{ number }}</a>
+      {% endif %}
+    {% endfor %}
+
+    {% if page_obj.has_next %}
+      <a href="{% url_with page=page_obj.next_page_number %}" rel="next">下一页</a>
+    {% else %}
+      <span class="disabled">下一页</span>
+    {% endif %}
+  </nav>
+{% endif %}

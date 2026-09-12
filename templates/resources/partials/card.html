@@ -1,0 +1,36 @@
+{% load site_tags humanize %}
+<article class="card">
+  <a class="card__cover" href="{{ resource.get_absolute_url }}" style="{{ resource|cover_style }}" tabindex="-1" aria-hidden="true">
+    {% if resource.cover_image %}
+      <img src="{{ resource.cover_image.url }}" alt="" loading="lazy">
+    {% else %}
+      <span class="card__cover-mark">{{ resource|first_char }}</span>
+    {% endif %}
+    {% if resource.is_pinned %}<span class="card__badge">置顶</span>{% endif %}
+    {% if resource.version %}<span class="card__version">v{{ resource.version|cut:"v" }}</span>{% endif %}
+  </a>
+
+  <div class="card__body">
+    <h3 class="card__title">
+      <a href="{{ resource.get_absolute_url }}">{{ resource.title }}</a>
+    </h3>
+    <p class="card__summary">{{ resource.display_summary }}</p>
+
+    <div class="card__meta">
+      {% if resource.category %}
+        <a class="card__cat" href="{{ resource.category.get_absolute_url }}">{{ resource.category.name }}</a>
+      {% endif %}
+      <span>{{ resource.updated_at|naturaltime }}</span>
+      <span class="card__spacer">
+        <span class="card__stat" title="评论数">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z"/></svg>
+          {{ resource.comment_total|default:0 }}
+        </span>
+        <span class="card__stat" title="浏览量">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+          {{ resource.views }}
+        </span>
+      </span>
+    </div>
+  </div>
+</article>

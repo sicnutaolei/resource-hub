@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}注册{% endblock %}
+
+{% block content %}
+  <div class="form-narrow">
+    <div class="form-card">
+      <div class="form-card__head">
+        <h1>注册账号</h1>
+        <p>本站资源无需登录即可下载，注册后可收藏与评论</p>
+      </div>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+          <div class="form-errors">
+            {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+          </div>
+        {% endif %}
+
+        {% for field in form %}
+          <div class="field">
+            <label class="field__label" for="{{ field.id_for_label }}">
+              {{ field.label }}{% if field.field.required %}<span style="color:var(--accent)"> *</span>{% endif %}
+            </label>
+            {{ field }}
+            {% if field.help_text %}<div class="field__help">{{ field.help_text }}</div>{% endif %}
+            {% if field.errors %}<div class="field__error">{{ field.errors.0 }}</div>{% endif %}
+          </div>
+        {% endfor %}
+
+        <button class="btn btn--primary btn--block btn--lg" type="submit">注册并登录</button>
+      </form>
+
+      <div class="form-foot">
+        已有账号？<a href="{% url 'accounts:login' %}">直接登录</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}

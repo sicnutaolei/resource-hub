@@ -1,0 +1,47 @@
+{% load site_tags %}
+<aside class="sidebar">
+  <div class="panel">
+    <div class="panel__title">资源分类</div>
+    <ul class="cat-list">
+      <li>
+        <a href="{% url 'resources:list' %}" class="{% is_active 'list' %}{% if not category and not tag %} active{% endif %}">
+          <span>全部资源</span>
+        </a>
+      </li>
+      {% for item in nav_categories %}
+        <li>
+          <a href="{{ item.get_absolute_url }}" class="{% if category and category.pk == item.pk %}active{% endif %}">
+            <span>{{ item.name }}</span>
+            <span class="count">{{ item.total }}</span>
+          </a>
+        </li>
+      {% empty %}
+        <li><span class="count">还没有分类，去后台添加</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  {% if nav_tags %}
+    <div class="panel">
+      <div class="panel__title">热门标签</div>
+      <div class="tag-cloud">
+        {% for item in nav_tags %}
+          <a class="tag-chip {% if tag and tag.pk == item.pk %}active{% endif %}" href="{{ item.get_absolute_url }}">
+            {{ item.name }}<span class="count">{{ item.total }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="panel">
+    <div class="panel__title">外链提示</div>
+    <div class="notice">
+      <span aria-hidden="true">!</span>
+      <span>
+        标注<b>网盘</b>的资源为第三方外链，可能因分享过期而失效。
+        若发现打不开，可在资源页留言提醒站长补档。
+      </span>
+    </div>
+  </div>
+</aside>

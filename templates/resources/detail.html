@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% load humanize site_tags %}
+
+{% block meta_description %}{{ resource.display_summary }}{% endblock %}
+
+{% block content %}
+  {% csrf_token %}
+
+  <nav class="breadcrumb" aria-label="面包屑">
+    <a href="{% url 'resources:home' %}">首页</a>
+    <span>/</span>
+    <a href="{% url 'resources:list' %}">全部资源</a>
+    {% if resource.category %}
+      <span>/</span>
+      <a href="{{ resource.category.get_absolute_url }}">{{ resource.category.name }}</a>
+    {% endif %}
+    <span>/</span>
+    <span>{{ resource.title|truncatechars:24 }}</span>
+  </nav>
+
+  <header class="detail-head">
+    <div class="detail-head__cover" style="{{ resource|cover_style }}">
+      {% if resource.cover_image %}
+        <img src="{{ resource.cover_image.url }}" alt="{{ resource.title }}">
+      {% else %}
+        <span>{{ resource|first_char }}</span>
+      {% endif %}
+    </div>
+
+    <div>
+      <h1>{{ resource.title }}</h1>
+
+      <div class="detail-meta">
+        {% if resource.category %}
+          <a class="card__cat" href="{{ resource.category.get_absolute_url }}">{{ resource.category.name }}</a>
+        {% endif %}
+        {% if resource.version %}
+          <span>版本 <b>{{ resource.version }}</b></span>
+        {% endif %}
+        <span>更新于 {{ resource.updated_at|naturaltime }}</span>
+        <span>浏览 {{ resource.views }}</span>
+        <span>收藏 <b data-favorite-count>{{ resource.favorited_by.count }}</b></span>
+      </div>
+
+      {% if resource.tags.all %}
+        <div class="tag-cloud" style="margin-bottom:var(--space-4)">
+          {% for item in resource.tags.all %}
+            <a class="tag-chip" href="{{ item.get_absolute_url }}">{{ item.name }}</a>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="detail-actions">
+        {% if local_links %}
+          <a class="btn btn--primary" href="#download">直接下载（{{ local_links|length }}）</a>
+        {% elif external_links %}
+          <a class="btn btn--primary" href="#download">前往下载（{{ external_links|length }}）</a>
+        {% endif %}
+
+        <button class="btn {% if is_favorited %}is-on{% endif %}" type="button"
+                aria-pressed="{% if is_favorited %}true{% else %}false{% endif %}"
+                data-favorite-url="{% url 'resources:toggle_favorite' resource.pk %}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m12 4 2.5 5.2 5.5.8-4 3.9.9 5.5-4.9-2.6L7.1 19.4l.9-5.5-4-3.9 5.5-.8Z"/></svg>
+          <span data-favorite-label>{% if is_favorited %}已收藏{% else %}收藏{% endif %}</span>
+        </button>
+
+        <button class="btn" type="button" data-copy="{{ request.build_absolute_uri }}">复制链接</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="detail-body">
+    <div>
+      <section class="block">
+        <div class="block__head"><h2>资源介绍</h2></div>
+        <div class="block__body">
+          {% if resource.description %}
+            <div class="prose">{{ resource.description }}</div>
+          {% else %}
+            <p class="prose">站长还没有填写详细介绍。</p>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="block" id="download">
+        <div class="block__head">
+          <h2>下载地址</h2>
+          <span class="count">共 {{ resource.links.count }} 个入口</span>
+        </div>
+        <div class="block__body">
+          {% if local_links %}
+            <div class="dl-list">
+              {% for link in local_links %}
+                <div class="dl-item">
+                  <div class="dl-item__icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="m8 11 4 4 4-4"/><path d="M5 19h14"/></svg>
+                  </div>
+                  <div class="dl-item__main">
+                    <div class="dl-item__label">{{ link.label }}<span class="card__cat">本地直链</span></div>
+                    <div class="dl-item__sub">
+                      {% if link.size_display %}<span>{{ link.size_display }}</span>{% endif %}
+                      <span>已下载 {{ link.downloads }} 次</span>
+                    </div>
+                  </div>
+                  <a class="btn btn--primary" href="{% url 'resources:download' link.pk %}">下载</a>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          {% if external_links %}
+            <div class="dl-list" {% if local_links %}style="margin-top:var(--space-4)"{% endif %}>
+              {% for link in external_links %}
+                <div class="dl-item {% if link.is_broken %}dl-item--broken{% endif %}">
+                  <div class="dl-item__icon dl-item__icon--ext" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+                  </div>
+                  <div class="dl-item__main">
+                    <div class="dl-item__label">
+                      {{ link.label }}
+                      <span class="card__cat" style="background:var(--bg-sunken);color:var(--text-muted)">网盘外链</span>
+                      {% if link.is_broken %}<span class="badge-admin">疑似失效</span>{% endif %}
+                    </div>
+                    <div class="dl-item__sub">
+                      {% if link.extract_code %}
+                        <span>提取码</span>
+                        <span class="code-box">{{ link.extract_code }}<button type="button" data-copy="{{ link.extract_code }}">复制</button></span>
+                      {% endif %}
+                      {% if link.last_checked_at %}<span>检测于 {{ link.last_checked_at|naturaltime }}</span>{% endif %}
+                    </div>
+                  </div>
+                  <a class="btn" href="{{ link.url }}" target="_blank" rel="noopener nofollow">打开</a>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          {% if not resource.links.all %}
+            <p class="prose">还没有添加下载地址，稍后再来看看。</p>
+          {% endif %}
+        </div>
+        <div class="block__foot">
+          外链资源托管在第三方网盘，可能因分享过期而失效。失效请留言，站长会尽快补档。
+        </div>
+      </section>
+
+      {% if logs %}
+        <section class="block">
+          <div class="block__head">
+            <h2>更新日志</h2>
+            <span class="count">{{ logs|length }} 个版本</span>
+          </div>
+          <div class="block__body">
+            <div class="timeline">
+              {% for log in logs %}
+                <div class="timeline__item">
+                  <div class="timeline__head">
+                    <span class="timeline__version">{{ log.version }}</span>
+                    <span class="timeline__date">{{ log.created_at|date:"Y-m-d" }}</span>
+                  </div>
+                  <ul class="timeline__lines">
+                    {% for line in log.lines %}
+                      <li>{{ line }}</li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </section>
+      {% endif %}
+
+      <section class="block" id="comments">
+        <div class="block__head">
+          <h2>评论</h2>
+          <span class="count">{{ comments|length }} 条</span>
+        </div>
+        <div class="block__body">
+          {% if user.is_authenticated %}
+            <form method="post" action="{% url 'resources:comment_create' resource.pk %}" style="margin-bottom:var(--space-5)">
+              {% csrf_token %}
+              <div class="field">
+                {{ comment_form.content }}
+                {% if comment_form.content.errors %}
+                  <div class="field__error">{{ comment_form.content.errors.0 }}</div>
+                {% endif %}
+              </div>
+              <button class="btn btn--primary" type="submit">发表评论</button>
+            </form>
+          {% else %}
+            <div class="notice" style="margin-bottom:var(--space-5)">
+              <span aria-hidden="true">i</span>
+              <span><a href="{% url 'accounts:login' %}?next={{ request.path }}" style="color:var(--primary)">登录</a> 后可以评论和收藏资源。还没有账号？<a href="{% url 'accounts:register' %}" style="color:var(--primary)">立即注册</a></span>
+            </div>
+          {% endif %}
+
+          {% if comments %}
+            <div class="comment-list">
+              {% for comment in comments %}
+                <div class="comment">
+                  {% if comment.user.avatar %}
+                    <img class="avatar avatar--sm" src="{{ comment.user.avatar.url }}" alt="">
+                  {% else %}
+                    <span class="avatar avatar--sm">{{ comment.user.initial }}</span>
+                  {% endif %}
+                  <div class="comment__main">
+                    <div class="comment__head">
+                      <span class="comment__name">{{ comment.user.display_name }}</span>
+                      {% if comment.user.is_staff %}<span class="badge-admin">站长</span>{% endif %}
+                      <span class="comment__time">{{ comment.created_at|naturaltime }}</span>
+                    </div>
+                    <div class="comment__body">{{ comment.content }}</div>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="prose">还没有评论，来做第一个吧。</p>
+          {% endif %}
+        </div>
+      </section>
+    </div>
+
+    <div>
+      <div class="block">
+        <div class="block__head"><h2>资源信息</h2></div>
+        <div class="block__body">
+          <ul class="spec-list">
+            <li><span>分类</span><span>{{ resource.category.name|default:"未分类" }}</span></li>
+            <li><span>当前版本</span><span>{{ resource.version|default:"—" }}</span></li>
+            <li><span>收录时间</span><span>{{ resource.created_at|date:"Y-m-d" }}</span></li>
+            <li><span>最后更新</span><span>{{ resource.updated_at|date:"Y-m-d" }}</span></li>
+            <li><span>下载入口</span><span>{{ resource.links.count }} 个</span></li>
+            <li><span>浏览量</span><span>{{ resource.views }}</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="block__head"><h2>小提示</h2></div>
+        <div class="block__body">
+          <div class="notice">
+            <span aria-hidden="true">!</span>
+            <span>
+              本站只收录<b>纯净版本</b>，安装时如遇到捆绑推广，欢迎在评论区指出。
+              网盘链接建议先转存再下载，避免分享失效。
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {% if related %}
+        <div class="block">
+          <div class="block__head"><h2>相关资源</h2></div>
+          <div class="block__body">
+            <div class="mini-list">
+              {% for item in related %}
+                <a class="mini-item" href="{{ item.get_absolute_url }}">
+                  <span class="mini-item__cover" style="{{ item|cover_style }}">
+                    {% if item.cover_image %}
+                      <img src="{{ item.cover_image.url }}" alt="">
+                    {% else %}
+                      {{ item|first_char }}
+                    {% endif %}
+                  </span>
+                  <span class="mini-item__text">
+                    <span class="mini-item__title">{{ item.title }}</span>
+                    <span class="mini-item__sub">{{ item.updated_at|naturaltime }}</span>
+                  </span>
+                </a>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

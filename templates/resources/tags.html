@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+  <nav class="breadcrumb" aria-label="面包屑">
+    <a href="{% url 'resources:home' %}">首页</a>
+    <span>/</span>
+    <span>分类标签</span>
+  </nav>
+
+  <div class="layout">
+    {% include "resources/partials/sidebar.html" %}
+
+    <div>
+      <section class="section">
+        <div class="section__head">
+          <h2 class="section__title">按分类浏览</h2>
+        </div>
+        <div class="grid">
+          {% for category in categories %}
+            <a class="panel" href="{{ category.get_absolute_url }}" style="display:block">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)">
+                <b>{{ category.name }}</b>
+                <span class="count" style="color:var(--text-dim);font-size:var(--text-xs)">{{ category.total }} 个</span>
+              </div>
+              {% if category.description %}
+                <p style="font-size:var(--text-xs);color:var(--text-dim);margin-top:6px">{{ category.description }}</p>
+              {% endif %}
+            </a>
+          {% empty %}
+            <div class="empty"><h3>还没有分类</h3><p>登录后台添加分类后再回来看看。</p></div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section__head">
+          <h2 class="section__title">全部标签</h2>
+          <span class="section__desc">按收录数量排序</span>
+        </div>
+        <div class="panel">
+          <div class="tag-cloud">
+            {% for tag in tags %}
+              <a class="tag-chip" href="{{ tag.get_absolute_url }}">{{ tag.name }}<span class="count">{{ tag.total }}</span></a>
+            {% empty %}
+              <p class="prose">还没有标签。</p>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}
