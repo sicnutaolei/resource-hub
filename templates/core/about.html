@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}关于本站{% endblock %}
 
@@ -13,6 +14,17 @@
     {% include "resources/partials/sidebar.html" %}
 
     <div>
+      <div class="panel about-brand" style="margin-bottom:var(--space-5)">
+        <picture>
+          <source srcset="{% static 'img/logo-full-512.webp' %}" type="image/webp">
+          <img src="{% static 'img/logo-full-256.png' %}" alt="{{ site_name }} 的标志" width="256" height="256" loading="lazy" decoding="async">
+        </picture>
+        <div>
+          <h2 class="section__title" style="margin-bottom:var(--space-3)">关于 {{ site_name }}</h2>
+          <div class="prose">{{ site_subtitle }}</div>
+        </div>
+      </div>
+
       <div class="panel" style="margin-bottom:var(--space-5)">
         <h2 class="section__title" style="margin-bottom:var(--space-3)">关于 {{ site_name }}</h2>
         <div class="prose">这里收录站长亲测可用的纯净软件与工具：没有捆绑安装包，没有全家桶，没有改主页。

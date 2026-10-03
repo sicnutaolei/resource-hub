@@ -47,6 +47,7 @@ resource-hub/
 ├── templates/              全部模板
 ├── static/css/             tokens.css（设计变量）+ main.css
 ├── static/js/              theme.js（主题）+ main.js（交互）
+├── static/img/             站点 Logo：SVG 源图 + 各尺寸 PNG/WebP（页头、favicon、关于页大图）
 ├── media/                  ★ 上传的封面图与本地文件（Docker volume）
 ├── data/                   ★ SQLite 数据库（Docker volume）
 ├── Dockerfile
@@ -74,7 +75,28 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-打开 `http://<服务器IP>:8082` 即可访问，后台在 `http://<服务器IP>:8082/admin/`。
+打开 `http://<服务器IP>:8082` 即可访问（需把该 IP 写进 `.env` 的 `ALLOWED_HOSTS`，否则 Django 返回 400），后台在 `http://<服务器IP>:8082/admin/`。
+
+### 线上入口：mefcl.taolei.dynv6.net
+
+生产环境通过飞牛 NAS 上的 nginx 反代暴露，容器本身只监听 8082：
+
+```
+浏览器 ──https://443──> nginx (mefcl.taolei.dynv6.net)
+                             └─http──> 127.0.0.1:8082 ──> gunicorn (容器)
+```
+
+| 访问方式 | 地址 | 说明 |
+|---|---|---|
+| 正式入口 | `https://mefcl.taolei.dynv6.net/` | nginx 终止 HTTPS，泛域名证书自动覆盖 |
+| 内网直连 | `http://192.168.2.165:8082/` | 调试用，需 IP 在 `ALLOWED_HOSTS` 内 |
+
+对应配置：
+
+- nginx 站点配置：`/vol1/1000/docker/reverse-proxy/conf.d/22-resource-hub.conf`
+- `.env` 里 `ALLOWED_HOSTS` 必须包含 `mefcl.taolei.dynv6.net`
+- `.env` 里 `USE_X_FORWARDED_PROTO=True`，让 Django 正确识别 https
+- nginx 的 `client_max_body_size` 要 ≥ `MAX_UPLOAD_SIZE_MB`，否则大文件上传会被网关截断
 
 ### 首次启动后必须做的事
 
@@ -116,8 +138,9 @@ tar czf resource-hub-backup-$(date +%F).tar.gz data media .env
 | `ADMIN_USERNAME` | `admin` | 管理员用户名 |
 | `ADMIN_PASSWORD` | 无（必填） | 管理员密码，**只从环境变量读，不写进代码** |
 | `DEBUG` | `False` | 生产必须保持 False |
-| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | 用域名访问必须加进去，否则 400 |
-| `CSRF_TRUSTED_ORIGINS` | 空 | 用 https 域名访问时填 `https://你的域名` |
+| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | 允许的域名 / IP 白名单。**没填就 400**，换 IP 后要同步更新 |
+| `CSRF_TRUSTED_ORIGINS` | 空 | 仅跨域 POST 才需要；同域访问不用填 |
+| `USE_X_FORWARDED_PROTO` | `False` | 前面有 nginx 终止 https 时设 `True` |
 | `SITE_NAME` | `资源小站` | 站名，显示在页头与页脚 |
 | `PAGE_SIZE` | `12` | 列表页每页条数 |
 | `SERVE_MEDIA` | `True` | True 由 Django 提供 `/media/`；交给前置 nginx 时设 False |
