@@ -6,20 +6,11 @@
 from datetime import timedelta
 
 from django.conf import settings
-from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from resources.models import (
-    Category,
-    Comment,
-    DownloadLink,
-    Favorite,
-    Resource,
-    Tag,
-    UpdateLog,
-)
+from resources.models import Category, DownloadLink, Resource, Tag, UpdateLog
 
 CATEGORIES = [
     ("工具软件", "日常必备的小工具与系统增强", 1),
@@ -298,19 +289,10 @@ class Command(BaseCommand):
 
         if options["reset"]:
             count = Resource.objects.count()
-            Favorite.objects.all().delete()
             Resource.objects.all().delete()
             Category.objects.all().delete()
             Tag.objects.all().delete()
             self.stdout.write(self.style.WARNING(f"已清空 {count} 条旧资源"))
-
-        demo_user, created = get_user_model().objects.get_or_create(
-            username="demo",
-            defaults={"nickname": "路过的网友", "bio": "只是来看看有没有好用的工具。"},
-        )
-        if created:
-            demo_user.set_password("demo12345")
-            demo_user.save()
 
         category_map = {
             name: Category.objects.get_or_create(
@@ -334,7 +316,7 @@ class Command(BaseCommand):
                 description=data["description"],
                 version=data["version"],
                 is_pinned=data.get("pinned", False),
-                is_published=True,
+                is_public=True,
                 views=data.get("views", 0),
             )
             # 错开时间，避免列表页所有条目时间一致
@@ -374,10 +356,6 @@ class Command(BaseCommand):
                     created_at=now - timedelta(days=index + offset * 5)
                 )
 
-            for text in data["comments"]:
-                Comment.objects.create(resource=resource, user=demo_user, content=text)
-
-            Favorite.objects.get_or_create(user=demo_user, resource=resource)
             created_count += 1
 
         # 人为造一条「疑似失效」外链，用于验证前端徽标样式
@@ -391,8 +369,8 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(f"演示数据就绪：新增 {created_count} 条资源"))
         self.stdout.write(
-            f"资源 {Resource.objects.count()} / 分类 {Category.objects.count()} / "
+            f"软件 {Resource.objects.count()} / 资源库 {Category.objects.count()} / "
             f"标签 {Tag.objects.count()} / 下载链接 {DownloadLink.objects.count()} / "
-            f"更新日志 {UpdateLog.objects.count()} / 评论 {Comment.objects.count()}"
+            f"更新日志 {UpdateLog.objects.count()}"
         )
-        self.stdout.write(f"演示账号：demo / demo12345")
+        self.stdout.write("演示数据不含普通用户；管理员请用 ensure_admin 初始化。")

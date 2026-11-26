@@ -82,7 +82,6 @@ X_FRAME_OPTIONS = "SAMEORIGIN"
 # 应用
 # --------------------------------------------------------------------------
 INSTALLED_APPS = [
-    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -93,6 +92,7 @@ INSTALLED_APPS = [
     "accounts",
     "resources",
     "core",
+    "dashboard",
 ]
 
 MIDDLEWARE = [
@@ -104,6 +104,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    # 仅管理员可进入后台；首次登录强制改密
+    "core.middleware.AdminAccessMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -145,6 +147,19 @@ DATABASES = {
 }
 
 
+# 文件缓存：站点设置与首页筛选标签。
+# 用文件而不是进程内 LocMem，保证 gunicorn 多 worker 之间也能立刻读到后台保存的新值。
+CACHE_DIR = Path(env_str("CACHE_DIR", str(BASE_DIR / "data" / "cache")))
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "LOCATION": str(CACHE_DIR),
+        "TIMEOUT": 300,
+    }
+}
+
+
 @receiver(connection_created)
 def _set_sqlite_pragmas(sender, connection, **kwargs):
     """每个新连接都应用 PRAGMA：WAL 提升并发读，busy_timeout 避免立刻报锁。"""
@@ -173,7 +188,7 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LOGIN_URL = "/accounts/login/"
-LOGIN_REDIRECT_URL = "/"
+LOGIN_REDIRECT_URL = "/manage/"
 LOGOUT_REDIRECT_URL = "/"
 
 # --------------------------------------------------------------------------
@@ -231,12 +246,19 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # --------------------------------------------------------------------------
 SITE_NAME = env_str("SITE_NAME", "资源小站")
 SITE_SUBTITLE = env_str("SITE_SUBTITLE", "只分享干净、无捆绑的资源")
-SITE_FOOTER = env_str(
-    "SITE_FOOTER", "本站资源多为第三方网盘外链，可能失效，请以实际为准。"
-)
+# 首页 slogan 的初始默认值；部署后可在后台「站点设置」中修改。
+SITE_SLOGAN = env_str("SITE_SLOGAN", SITE_SUBTITLE)
 
-PAGE_SIZE = env_int("PAGE_SIZE", 12)
+# 首页每页条数只允许 20/24/30，默认 24。
+# 旧 .env 里如果还写着 PAGE_SIZE=12，会被这里的白名单纠正为 24。
+PAGE_SIZE_CHOICES = (20, 24, 30)
+_page_size = env_int("PAGE_SIZE", 24)
+PAGE_SIZE = _page_size if _page_size in PAGE_SIZE_CHOICES else 24
 EXTERNAL_LINK_CHECK_TIMEOUT = env_int("EXTERNAL_LINK_CHECK_TIMEOUT", 8)
+
+# 站点设置与筛选标签缓存（秒）。后台保存设置会立刻清缓存，TTL 是多进程兜底。
+SITE_SETTING_CACHE_TTL = env_int("SITE_SETTING_CACHE_TTL", 300)
+FILTER_TAGS_CACHE_TTL = env_int("FILTER_TAGS_CACHE_TTL", 60)
 
 
 # --------------------------------------------------------------------------

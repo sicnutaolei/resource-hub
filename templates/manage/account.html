@@ -1,0 +1,47 @@
+{% extends "manage/base.html" %}
+
+{% block page_title %}账号安全{% endblock %}
+
+{% block content %}
+  {% if forced %}
+    <div class="mg-notice mg-notice--warn">
+      首次登录请先修改默认密码，修改成功后即可正常使用后台。
+    </div>
+  {% endif %}
+
+  <div class="mg-settings-grid">
+    <section class="mg-card">
+      <div class="mg-card__head"><h2>账号信息</h2></div>
+      <div class="mg-card__body">
+        <dl class="mg-dl">
+          <div><dt>用户名</dt><dd>{{ user.username }}</dd></div>
+          <div><dt>邮箱</dt><dd>{{ user.email|default:"—" }}</dd></div>
+          <div><dt>角色</dt><dd>管理员</dd></div>
+          <div><dt>上次登录</dt><dd>{{ user.last_login|date:"Y-m-d H:i"|default:"—" }}</dd></div>
+          <div><dt>创建时间</dt><dd>{{ user.date_joined|date:"Y-m-d H:i" }}</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="mg-card">
+      <div class="mg-card__head"><h2>修改密码</h2></div>
+      <div class="mg-card__body">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="form-errors">
+              {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+            </div>
+          {% endif %}
+
+          {% for field in form %}
+            {% include "manage/partials/field.html" with field=field %}
+          {% endfor %}
+
+          <button class="btn btn--primary" type="submit">更新密码</button>
+        </form>
+      </div>
+    </section>
+  </div>
+{% endblock %}

@@ -1,10 +1,20 @@
+import logging
+from io import BytesIO
+from pathlib import PurePosixPath
+
 from django.conf import settings
+from django.core.files.base import ContentFile
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
+from PIL import Image, ImageOps
 
 from core.validators import human_size, validate_image_upload, validate_upload_size
+
+logger = logging.getLogger(__name__)
+
+THUMB_SIZE = (640, 400)
 
 
 def unique_slugify(instance, value: str, slug_field: str = "slug") -> str:
@@ -32,15 +42,17 @@ def unique_slugify(instance, value: str, slug_field: str = "slug") -> str:
 
 
 class Category(models.Model):
-    name = models.CharField("分类名", max_length=50, unique=True)
+    """资源库：仅用于给软件分类，不参与公开/私有取交集。"""
+
+    name = models.CharField("资源库名称", max_length=50, unique=True)
     slug = models.SlugField("URL 标识", max_length=60, blank=True, db_index=True)
     description = models.CharField("描述", max_length=200, blank=True)
     order = models.IntegerField("排序", default=100, help_text="数字越小越靠前")
     created_at = models.DateTimeField("创建时间", auto_now_add=True)
 
     class Meta:
-        verbose_name = "分类"
-        verbose_name_plural = "分类"
+        verbose_name = "资源库"
+        verbose_name_plural = "资源库"
         ordering = ["order", "id"]
 
     def __str__(self):
@@ -51,12 +63,10 @@ class Category(models.Model):
             self.slug = unique_slugify(self, self.name)
         super().save(*args, **kwargs)
 
-    def get_absolute_url(self):
-        key = self.slug or self.pk
-        return reverse("resources:category", args=[key])
-
 
 class Tag(models.Model):
+    """标签：首页筛选标签与搜索范围都固定取自这张表。"""
+
     name = models.CharField("标签名", max_length=40, unique=True)
     slug = models.SlugField("URL 标识", max_length=60, blank=True, db_index=True)
     created_at = models.DateTimeField("创建时间", auto_now_add=True)
@@ -75,14 +85,16 @@ class Tag(models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        key = self.slug or self.pk
-        return reverse("resources:tag", args=[key])
+        return f"{reverse('resources:home')}?tag={self.pk}"
 
 
 class Resource(models.Model):
-    """资源条目：软件名 / 版本 / 说明，关联多个下载链接与更新日志。"""
+    """软件条目：名称 / 简介 / 下载链接 / 更新日志。
 
-    title = models.CharField("资源名称", max_length=150)
+    is_public 是唯一的可见性开关：资源库（Category）只做分类，不参与可见性计算。
+    """
+
+    title = models.CharField("软件名称", max_length=150)
     slug = models.SlugField(
         "URL 标识",
         max_length=140,
@@ -92,7 +104,7 @@ class Resource(models.Model):
     )
     category = models.ForeignKey(
         Category,
-        verbose_name="分类",
+        verbose_name="所属资源库",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -103,10 +115,10 @@ class Resource(models.Model):
     )
 
     summary = models.CharField(
-        "卡片摘要",
+        "简短标题",
         max_length=200,
         blank=True,
-        help_text="列表页展示的一句话介绍，留空则自动截取简介前 60 字",
+        help_text="卡片与搜索结果里的一句话介绍，留空则自动截取简介前 60 字",
     )
     description = models.TextField(
         "详细介绍", blank=True, help_text="支持换行；建议写软件简介、本版特点"
@@ -120,20 +132,30 @@ class Resource(models.Model):
         validators=[validate_image_upload],
     )
 
-    is_published = models.BooleanField("已发布", default=True)
-    is_pinned = models.BooleanField("首页置顶", default=False)
+    is_public = models.BooleanField(
+        "公开",
+        default=True,
+        help_text="公开后未登录访客也能在首页、详情与下载入口访问",
+    )
+    # 历史字段，保留列以兼容旧数据；首页已不再使用置顶。
+    is_pinned = models.BooleanField("首页置顶（已停用）", default=False)
     views = models.PositiveIntegerField("浏览量", default=0)
 
     created_at = models.DateTimeField("创建时间", auto_now_add=True)
     updated_at = models.DateTimeField("更新时间", auto_now=True)
 
     class Meta:
-        verbose_name = "资源"
-        verbose_name_plural = "资源"
-        ordering = ["-is_pinned", "-updated_at"]
+        verbose_name = "软件"
+        verbose_name_plural = "软件"
+        ordering = ["-updated_at"]
         indexes = [
-            models.Index(fields=["-updated_at"]),
-            models.Index(fields=["is_published", "-is_pinned", "-updated_at"]),
+            # 首页/搜索最常用的组合：公开状态 + 更新时间倒序
+            models.Index(
+                fields=["is_public", "-updated_at"],
+                name="resources_public_updated_idx",
+            ),
+            # 软件名称搜索索引
+            models.Index(fields=["title"], name="resources_title_idx"),
         ]
 
     def __str__(self):
@@ -143,6 +165,8 @@ class Resource(models.Model):
         if not self.slug:
             self.slug = unique_slugify(self, self.title)
         super().save(*args, **kwargs)
+        if self.cover_image:
+            self._warm_thumbnail()
 
     def get_absolute_url(self):
         key = self.slug or self.pk
@@ -177,6 +201,55 @@ class Resource(models.Model):
         """用 F 表达式自增，避免读改写竞态。"""
         Resource.objects.filter(pk=self.pk).update(views=models.F("views") + 1)
 
+    # ---------------------------- 缩略图 ----------------------------
+    @property
+    def _thumbnail_name(self) -> str:
+        if not self.cover_image:
+            return ""
+        path = PurePosixPath(self.cover_image.name)
+        return str(path.parent / "thumbs" / f"{path.stem}-640x400.jpg")
+
+    def _warm_thumbnail(self) -> str:
+        """生成并缓存 640x400 封面缩略图，失败时退回原图。"""
+        if not self.cover_image:
+            return ""
+        cached = getattr(self, "_thumbnail_url", "")
+        if cached:
+            return cached
+
+        storage = self.cover_image.storage
+        name = self._thumbnail_name
+        if not name:
+            return ""
+        if not storage.exists(name):
+            try:
+                with self.cover_image.open("rb") as source:
+                    image = Image.open(source)
+                    image = ImageOps.exif_transpose(image)
+                    if image.mode in ("RGBA", "LA", "P"):
+                        image = image.convert("RGBA")
+                        background = Image.new("RGB", image.size, (255, 255, 255))
+                        background.paste(image, mask=image.split()[-1])
+                        image = background
+                    else:
+                        image = image.convert("RGB")
+                    image = ImageOps.fit(
+                        image, THUMB_SIZE, Image.Resampling.LANCZOS, centering=(0.5, 0.5)
+                    )
+                    buffer = BytesIO()
+                    image.save(buffer, format="JPEG", quality=82, optimize=True)
+                    storage.save(name, ContentFile(buffer.getvalue()))
+            except Exception:  # noqa: BLE001
+                logger.warning("生成封面缩略图失败：resource=%s", self.pk, exc_info=True)
+                return self.cover_image.url
+
+        self._thumbnail_url = storage.url(name)
+        return self._thumbnail_url
+
+    @property
+    def thumbnail_url(self) -> str:
+        return self._warm_thumbnail()
+
 
 class DownloadLink(models.Model):
     """一个下载入口：要么是本地文件，要么是外部网盘链接。"""
@@ -189,7 +262,7 @@ class DownloadLink(models.Model):
     ]
 
     resource = models.ForeignKey(
-        Resource, verbose_name="所属资源", on_delete=models.CASCADE, related_name="links"
+        Resource, verbose_name="所属软件", on_delete=models.CASCADE, related_name="links"
     )
     label = models.CharField(
         "按钮名称", max_length=50, help_text="例如：本地下载 / 百度网盘 / 蓝奏云"
@@ -260,10 +333,10 @@ class DownloadLink(models.Model):
 
 
 class UpdateLog(models.Model):
-    """资源更新日志：某资源在某个版本改了什么。"""
+    """软件更新日志：某软件在某个版本改了什么。"""
 
     resource = models.ForeignKey(
-        Resource, verbose_name="所属资源", on_delete=models.CASCADE, related_name="logs"
+        Resource, verbose_name="所属软件", on_delete=models.CASCADE, related_name="logs"
     )
     version = models.CharField("版本号", max_length=60)
     content = models.TextField("更新内容", help_text="一条一行，或用换行分隔多条")
@@ -283,11 +356,11 @@ class UpdateLog(models.Model):
 
 
 class Comment(models.Model):
-    """资源评论：登录用户可见、可发。"""
+    """历史评论表：前台已不再展示，保留数据表以兼容旧数据。"""
 
     resource = models.ForeignKey(
         Resource,
-        verbose_name="所属资源",
+        verbose_name="所属软件",
         on_delete=models.CASCADE,
         related_name="comments",
     )
@@ -302,8 +375,8 @@ class Comment(models.Model):
     created_at = models.DateTimeField("评论时间", auto_now_add=True)
 
     class Meta:
-        verbose_name = "评论"
-        verbose_name_plural = "评论"
+        verbose_name = "评论（已停用）"
+        verbose_name_plural = "评论（已停用）"
         ordering = ["created_at"]
         indexes = [models.Index(fields=["resource", "-created_at"])]
 
@@ -312,7 +385,7 @@ class Comment(models.Model):
 
 
 class Favorite(models.Model):
-    """收藏：注册用户的唯一动机来源。"""
+    """历史收藏表：前台已不再展示，保留数据表以兼容旧数据。"""
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -322,15 +395,15 @@ class Favorite(models.Model):
     )
     resource = models.ForeignKey(
         Resource,
-        verbose_name="资源",
+        verbose_name="软件",
         on_delete=models.CASCADE,
         related_name="favorited_by",
     )
     created_at = models.DateTimeField("收藏时间", auto_now_add=True)
 
     class Meta:
-        verbose_name = "收藏"
-        verbose_name_plural = "收藏"
+        verbose_name = "收藏（已停用）"
+        verbose_name_plural = "收藏（已停用）"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(

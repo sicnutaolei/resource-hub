@@ -1,0 +1,121 @@
+{% extends "manage/base.html" %}
+
+{% block page_title %}{{ form_title }}{% endblock %}
+
+{% block content %}
+  <form class="mg-form" method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="form-errors">
+        {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="mg-form-grid">
+      <div class="mg-form-main">
+        <section class="mg-card">
+          <div class="mg-card__head"><h2>基本信息</h2></div>
+          <div class="mg-card__body">
+            <div class="mg-field-grid">
+              {% include "manage/partials/field.html" with field=form.title %}
+              {% include "manage/partials/field.html" with field=form.version %}
+              <div class="mg-field--full">{% include "manage/partials/field.html" with field=form.summary %}</div>
+              <div class="mg-field--full">{% include "manage/partials/field.html" with field=form.description %}</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="mg-card">
+          <div class="mg-card__head">
+            <h2>下载链接</h2>
+            <span class="muted">本地文件或网盘外链；外部链接也会经过服务端鉴权后跳转</span>
+          </div>
+          <div class="mg-card__body">
+            <div class="formset" data-formset="links">
+              {{ link_formset.management_form }}
+              <div class="formset__rows">
+                {% for f in link_formset %}
+                  {% include "manage/partials/formset_row.html" with form=f %}
+                {% endfor %}
+              </div>
+              <template data-empty-form>
+                {% include "manage/partials/formset_row.html" with form=link_formset.empty_form %}
+              </template>
+              <button class="btn btn--sm" type="button" data-add-formset="links">+ 添加下载链接</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="mg-card">
+          <div class="mg-card__head"><h2>更新日志</h2></div>
+          <div class="mg-card__body">
+            <div class="formset" data-formset="logs">
+              {{ log_formset.management_form }}
+              <div class="formset__rows">
+                {% for f in log_formset %}
+                  {% include "manage/partials/formset_row.html" with form=f %}
+                {% endfor %}
+              </div>
+              <template data-empty-form>
+                {% include "manage/partials/formset_row.html" with form=log_formset.empty_form %}
+              </template>
+              <button class="btn btn--sm" type="button" data-add-formset="logs">+ 添加更新记录</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <aside class="mg-form-side">
+        <section class="mg-card">
+          <div class="mg-card__head"><h2>发布设置</h2></div>
+          <div class="mg-card__body">
+            <label class="switch">
+              {{ form.is_public }}
+              <span class="switch__track" aria-hidden="true"></span>
+              <span class="switch__label">公开</span>
+            </label>
+            {% if form.is_public.errors %}<div class="field__error">{{ form.is_public.errors.0 }}</div>{% endif %}
+            <p class="muted small">新建软件默认公开；关闭后仅已登录管理员可见，详情与下载均做服务端鉴权。</p>
+
+            <div class="mg-divider"></div>
+
+            {% include "manage/partials/field.html" with field=form.category %}
+            {% include "manage/partials/field.html" with field=form.tags_text %}
+          </div>
+        </section>
+
+        <section class="mg-card">
+          <div class="mg-card__head"><h2>封面</h2></div>
+          <div class="mg-card__body">
+            <div class="cover-preview" data-cover-preview>
+              {% if form.instance.cover_image %}
+                <img src="{{ form.instance.thumbnail_url }}" alt="当前封面" width="240" height="150">
+              {% else %}
+                <div class="cover-preview__empty">暂无封面</div>
+              {% endif %}
+            </div>
+            {% include "manage/partials/field.html" with field=form.cover_image %}
+          </div>
+        </section>
+
+        <section class="mg-card">
+          <div class="mg-card__head"><h2>操作</h2></div>
+          <div class="mg-card__body mg-actions-stack">
+            <button class="btn btn--primary btn--block" type="submit">保存</button>
+            <a class="btn btn--block" href="{% url 'manage:software_list' %}">取消</a>
+            {% if not is_create %}
+              <button class="btn btn--danger btn--block" type="submit" form="delete-software">删除软件</button>
+            {% endif %}
+          </div>
+        </section>
+      </aside>
+    </div>
+  </form>
+
+  {% if not is_create %}
+    <form id="delete-software" method="post" action="{% url 'manage:software_delete' form.instance.pk %}" data-confirm="确认删除「{{ form.instance.title }}」？软件、下载链接与更新日志都会被删除，且不可恢复。">
+      {% csrf_token %}
+    </form>
+  {% endif %}
+{% endblock %}

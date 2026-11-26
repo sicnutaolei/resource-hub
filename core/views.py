@@ -2,19 +2,20 @@ from django.db import connection
 from django.http import JsonResponse
 from django.shortcuts import render
 
-from resources.models import Category, Resource, UpdateLog
+from resources.models import Category, DownloadLink, Resource, Tag
 
 
 def about(request):
-    """关于页：顺带展示站点数据，纯静态站也能有点内容。"""
+    """关于页：README 风格的站点简介。"""
     stats = {
-        "resources": Resource.objects.filter(is_published=True).count(),
-        "categories": Category.objects.count(),
-        "logs": UpdateLog.objects.count(),
+        "software": Resource.objects.filter(is_public=True).count(),
+        "libraries": Category.objects.count(),
+        "tags": Tag.objects.count(),
+        "downloads": DownloadLink.objects.filter(
+            resource__is_public=True, is_active=True
+        ).count(),
     }
-    return render(
-        request, "core/about.html", {"stats": stats, "page_title": "关于本站"}
-    )
+    return render(request, "core/about.html", {"stats": stats})
 
 
 def healthz(request):
@@ -33,7 +34,7 @@ def healthz(request):
 def robots_txt(request):
     lines = [
         "User-agent: *",
-        "Disallow: /admin/",
+        "Disallow: /manage/",
         "Disallow: /accounts/",
         f"Sitemap: {request.build_absolute_uri('/')}",
     ]

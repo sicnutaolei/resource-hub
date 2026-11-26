@@ -1,0 +1,41 @@
+{% extends "manage/base.html" %}
+
+{% block page_title %}站点设置{% endblock %}
+
+{% block content %}
+  <form class="mg-form" method="post" novalidate data-settings-form>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="form-errors">
+        {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="mg-settings-grid">
+      <section class="mg-card">
+        <div class="mg-card__head"><h2>首页文案</h2></div>
+        <div class="mg-card__body">
+          {% include "manage/partials/field.html" with field=form.site_name %}
+          {% include "manage/partials/field.html" with field=form.homepage_slogan %}
+          <p class="muted small">保存后缓存立即失效，首页马上生效。模板输出会自动转义，防止 XSS。</p>
+          <div class="mg-form-actions">
+            <button class="btn btn--primary" type="submit">保存设置</button>
+            <a class="btn" href="{% url 'resources:home' %}" target="_blank" rel="noopener">查看首页</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="mg-card">
+        <div class="mg-card__head"><h2>首页预览</h2></div>
+        <div class="mg-card__body">
+          <div class="settings-preview">
+            <p class="settings-preview__name" data-preview-name>{{ initial.site_name }}</p>
+            <h3 data-preview-slogan>{{ initial.homepage_slogan }}</h3>
+            <div class="settings-preview__search">搜索软件名称、简介或标签…</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </form>
+{% endblock %}

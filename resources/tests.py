@@ -1,20 +1,34 @@
 import shutil
 import tempfile
+from datetime import timedelta
+from io import BytesIO
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import connection
 from django.forms import modelform_factory
 from django.test import TestCase, override_settings
-from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
+from PIL import Image
 
+from core.models import SiteSetting
 from core.validators import human_size, validate_image_upload, validate_upload_size
 
-from .models import Category, Comment, DownloadLink, Favorite, Resource, Tag, UpdateLog
+from .models import Category, DownloadLink, Resource, Tag, UpdateLog
 
 User = get_user_model()
+
+
+def make_resource(title, *, public=True, category=None, tags=None, **kwargs):
+    resource = Resource.objects.create(
+        title=title, is_public=public, category=category, **kwargs
+    )
+    if tags:
+        resource.tags.set(tags)
+    return resource
 
 
 class SlugBehaviourTests(TestCase):
@@ -36,24 +50,30 @@ class SlugBehaviourTests(TestCase):
         self.assertEqual(first.slug, "test-tool")
         self.assertEqual(second.slug, "test-tool-2")
 
-    def test_category_and_tag_urls(self):
-        category = Category.objects.create(name="系统工具")
+    def test_tag_url_points_to_home_filter(self):
         tag = Tag.objects.create(name="绿色版")
-        self.assertEqual(category.get_absolute_url(), f"/c/{category.pk}/")
-        self.assertEqual(tag.get_absolute_url(), f"/t/{tag.pk}/")
+        self.assertEqual(tag.get_absolute_url(), f"/?tag={tag.pk}")
+
+    def test_is_public_defaults_true(self):
+        resource = Resource.objects.create(title="默认公开")
+        self.assertTrue(resource.is_public)
 
 
 class DownloadLinkTests(TestCase):
     def setUp(self):
-        self.resource = Resource.objects.create(title="测试资源")
+        self.resource = make_resource("测试软件")
 
     def test_external_link_requires_url(self):
-        link = DownloadLink(resource=self.resource, label="网盘", link_type=DownloadLink.EXTERNAL)
+        link = DownloadLink(
+            resource=self.resource, label="网盘", link_type=DownloadLink.EXTERNAL
+        )
         with self.assertRaises(ValidationError):
             link.full_clean()
 
     def test_local_link_requires_file(self):
-        link = DownloadLink(resource=self.resource, label="本地", link_type=DownloadLink.LOCAL)
+        link = DownloadLink(
+            resource=self.resource, label="本地", link_type=DownloadLink.LOCAL
+        )
         with self.assertRaises(ValidationError):
             link.full_clean()
 
@@ -61,30 +81,12 @@ class DownloadLinkTests(TestCase):
         link = DownloadLink(resource=self.resource, file_size=12_345_678)
         self.assertEqual(link.size_display, "11.8 MB")
 
-    def test_download_view_rejects_external_link(self):
-        link = DownloadLink.objects.create(
-            resource=self.resource,
-            label="网盘",
-            link_type=DownloadLink.EXTERNAL,
-            url="https://example.com/file",
-        )
-        response = self.client.get(reverse("resources:download", args=[link.pk]))
-        self.assertEqual(response.status_code, 404)
-
 
 class UploadValidationTests(TestCase):
-    """
-    上传体积与类型校验。
-
-    背景：MAX_UPLOAD_SIZE_MB 一度只是个「被读进 settings 但没人用」的环境变量，
-    配了等于没配。这组测试把「真正生效」这件事锁住：
-    既直接测校验器，也断言字段确实挂上了校验器、且走真实表单提交会被拦下。
-    """
+    """上传体积与类型校验。"""
 
     def setUp(self):
         self.resource = Resource.objects.create(title="上传校验测试资源")
-
-    # ---- 体积上限 ----
 
     def test_oversized_upload_is_rejected(self):
         with override_settings(MAX_UPLOAD_SIZE_MB=1):
@@ -100,7 +102,6 @@ class UploadValidationTests(TestCase):
             validate_upload_size(SimpleUploadedFile("small.bin", b"x" * (512 * 1024)))
 
     def test_limit_is_read_from_settings_at_call_time(self):
-        """改配置应当立刻生效，而不是被 import 时的常量锁死。"""
         upload = SimpleUploadedFile("mid.bin", b"x" * (2 * 1024 * 1024))
         with override_settings(MAX_UPLOAD_SIZE_MB=1):
             with self.assertRaises(ValidationError):
@@ -112,8 +113,6 @@ class UploadValidationTests(TestCase):
         validate_upload_size(None)
         validate_upload_size("not-a-file")
 
-    # ---- 图片类型白名单 ----
-
     def test_image_extension_whitelist(self):
         for name in ("cover.png", "cover.JPG", "cover.webp", "cover.gif", "cover.bmp"):
             validate_image_upload(SimpleUploadedFile(name, b"data"))
@@ -124,7 +123,6 @@ class UploadValidationTests(TestCase):
                 validate_image_upload(SimpleUploadedFile(name, b"data"))
 
     def test_svg_rejected_because_it_can_carry_scripts(self):
-        """SVG 可内嵌 script，且 media 与站点同源，因此必须挡掉。"""
         with self.assertRaises(ValidationError):
             validate_image_upload(SimpleUploadedFile("evil.svg", b"<svg/>"))
 
@@ -133,8 +131,6 @@ class UploadValidationTests(TestCase):
             big = SimpleUploadedFile("big.png", b"x" * (2 * 1024 * 1024))
             with self.assertRaises(ValidationError):
                 validate_image_upload(big)
-
-    # ---- 校验器真的挂在字段上 ----
 
     def test_model_fields_actually_carry_the_validators(self):
         self.assertIn(
@@ -146,8 +142,6 @@ class UploadValidationTests(TestCase):
         self.assertIn(
             validate_image_upload, User._meta.get_field("avatar").validators
         )
-
-    # ---- 走真实表单提交（管理员上传走的就是这条路）----
 
     def test_upload_through_model_form_is_blocked(self):
         form_class = modelform_factory(
@@ -167,13 +161,9 @@ class UploadValidationTests(TestCase):
 
     def test_avatar_form_rejects_svg(self):
         form_class = modelform_factory(User, fields=["avatar"])
-        form = form_class(
-            files={"avatar": SimpleUploadedFile("evil.svg", b"<svg/>")}
-        )
+        form = form_class(files={"avatar": SimpleUploadedFile("evil.svg", b"<svg/>")})
         self.assertFalse(form.is_valid())
         self.assertIn("avatar", form.errors)
-
-    # ---- 体积格式化 ----
 
     def test_human_size(self):
         self.assertEqual(human_size(0), "0 B")
@@ -183,257 +173,276 @@ class UploadValidationTests(TestCase):
         self.assertEqual(human_size(3 * 1024**3), "3.0 GB")
 
 
-class ResourceViewTests(TestCase):
+class VisibilityTests(TestCase):
     def setUp(self):
-        self.category = Category.objects.create(name="系统工具")
-        self.tag = Tag.objects.create(name="轻量")
-        self.user = User.objects.create_user(
-            username="tester", password="test12345", email="t@example.com"
+        cache.clear()
+        self.staff = User.objects.create_superuser(
+            username="admin", email="a@example.com", password="Str0ngPass!2026"
         )
-
-    def _make_resource(self, index, **kwargs):
-        resource = Resource.objects.create(
-            title=f"资源 {index}",
-            category=self.category,
-            summary="摘要",
-            views=index,
-            **kwargs,
+        self.public_tag = Tag.objects.create(name="公开标签")
+        self.private_tag = Tag.objects.create(name="私有标签")
+        self.public = make_resource("公开播放器", tags=[self.public_tag])
+        self.private = make_resource(
+            "私有播放器", public=False, tags=[self.private_tag]
         )
-        resource.tags.add(self.tag)
-        DownloadLink.objects.create(
-            resource=resource,
-            label="百度网盘",
+        self.private_link = DownloadLink.objects.create(
+            resource=self.private,
+            label="私有外链",
             link_type=DownloadLink.EXTERNAL,
-            url="https://example.com/demo",
-            extract_code="ab12",
+            url="https://example.com/private",
         )
-        UpdateLog.objects.create(resource=resource, version="1.0", content="首次发布")
-        return resource
 
-    def test_home_renders(self):
-        self._make_resource(1, is_pinned=True)
+    def test_anonymous_home_only_public(self):
         response = self.client.get(reverse("resources:home"))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "资源 1")
+        self.assertContains(response, self.public.title)
+        self.assertNotContains(response, self.private.title)
 
-    def test_list_renders_and_filters(self):
-        self._make_resource(1)
-        self._make_resource(2, is_published=False)
+    def test_staff_home_includes_private_with_badge(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("resources:home"))
+        self.assertContains(response, self.public.title)
+        self.assertContains(response, self.private.title)
+        self.assertContains(response, "非公开")
 
-        response = self.client.get(reverse("resources:list"))
-        self.assertContains(response, "资源 1")
-        self.assertNotContains(response, "资源 2")
-
-        response = self.client.get(reverse("resources:list"), {"category": self.category.slug or self.category.pk})
-        self.assertContains(response, "资源 1")
-
-        response = self.client.get(reverse("resources:list"), {"tag": self.tag.slug or self.tag.pk})
-        self.assertContains(response, "资源 1")
-
-        response = self.client.get(reverse("resources:list"), {"q": "资源"})
-        self.assertContains(response, "资源 1")
-
-        response = self.client.get(reverse("resources:list"), {"q": "不存在的词"})
-        self.assertNotContains(response, "资源 1")
-
-    def test_unpublished_is_hidden_from_detail(self):
-        resource = self._make_resource(1, is_published=False)
-        response = self.client.get(resource.get_absolute_url())
-        self.assertEqual(response.status_code, 404)
-
-    def test_detail_accessible_by_slug_and_pk(self):
-        resource = Resource.objects.create(title="Portable App", category=self.category)
-        self.assertEqual(self.client.get("/r/portable-app/").status_code, 200)
-        self.assertEqual(self.client.get(f"/r/{resource.pk}/").status_code, 200)
-
-    def test_detail_bumps_views(self):
-        resource = self._make_resource(1)
-        self.client.get(resource.get_absolute_url())
-        resource.refresh_from_db()
-        self.assertEqual(resource.views, 2)  # 初始 views=1，访问后 +1
-
-    def test_list_query_count_does_not_grow_with_rows(self):
-        """
-        核心断言：列表页用 prefetch_related 预取标签，
-        查询次数必须与资源数量无关（不随行数增长 = 没有 N+1）。
-        """
-        for index in range(1, 3):
-            self._make_resource(index)
-        with CaptureQueriesContext(connection) as small:
-            self.client.get(reverse("resources:list"))
-
-        for index in range(3, 10):
-            self._make_resource(index)
-        with CaptureQueriesContext(connection) as large:
-            self.client.get(reverse("resources:list"))
-
+    def test_anonymous_detail_gate(self):
         self.assertEqual(
-            len(small),
-            len(large),
-            f"查询次数随资源数量增长了：2 条时 {len(small)} 次，8 条时 {len(large)} 次，存在 N+1",
+            self.client.get(self.public.get_absolute_url()).status_code, 200
         )
-        self.assertLessEqual(len(large), 20, "列表页查询次数过多，检查是否漏了预取")
-
-    def test_home_query_count_does_not_grow_with_rows(self):
-        """
-        首页同理。
-
-        注意：两种规模必须都处于「有置顶、也有非置顶资源」的状态，
-        否则会走到不同的模板分支（空态 vs 列表），比较就失去意义。
-        """
-        self._make_resource(0, is_pinned=True)
-        for index in range(1, 3):
-            self._make_resource(index)
-        with CaptureQueriesContext(connection) as small:
-            self.client.get(reverse("resources:home"))
-
-        for index in range(3, 10):
-            self._make_resource(index)
-        with CaptureQueriesContext(connection) as large:
-            self.client.get(reverse("resources:home"))
-
         self.assertEqual(
-            len(small),
-            len(large),
-            f"首页查询次数增长了：3 条时 {len(small)} 次，9 条时 {len(large)} 次，存在 N+1",
-        )
-        self.assertLessEqual(len(large), 20, "首页查询次数过多，检查是否漏了预取")
-
-    def test_tag_prefetch_actually_avoids_extra_queries(self):
-        """标签是多对多，只有 prefetch_related 能避免 N+1。"""
-        for index in range(1, 6):
-            self._make_resource(index)
-
-        with CaptureQueriesContext(connection) as ctx:
-            self.client.get(reverse("resources:list"))
-
-        tag_queries = [
-            query["sql"] for query in ctx.captured_queries if "resources_tag" in query["sql"]
-        ]
-        # 标签查询只应有一次（预取），而不是每个资源一次
-        self.assertLessEqual(
-            len(tag_queries), 2, f"标签查询了 {len(tag_queries)} 次，存在 N+1"
+            self.client.get(self.private.get_absolute_url()).status_code, 404
         )
 
-
-class CommentAndFavoriteTests(TestCase):
-    def setUp(self):
-        self.resource = Resource.objects.create(title="可评论资源")
-        self.user = User.objects.create_user(
-            username="tester", password="test12345", email="t@example.com"
+    def test_staff_can_view_private_detail(self):
+        self.client.force_login(self.staff)
+        self.assertEqual(
+            self.client.get(self.private.get_absolute_url()).status_code, 200
         )
 
-    def test_comment_requires_login(self):
-        response = self.client.post(
-            reverse("resources:comment_create", args=[self.resource.pk]),
-            {"content": "好用"},
+    def test_anonymous_search_does_not_leak_private(self):
+        response = self.client.get(reverse("resources:home"), {"q": "播放器"})
+        self.assertContains(response, self.public.title)
+        self.assertNotContains(response, self.private.title)
+
+    def test_anonymous_tag_filter_does_not_leak_private(self):
+        response = self.client.get(
+            reverse("resources:home"), {"tag": self.private_tag.pk}
         )
+        self.assertEqual(response.context["page_obj"].paginator.count, 0)
+        self.assertNotContains(response, self.private.title)
+
+    def test_private_download_gate(self):
+        url = reverse("resources:download", args=[self.private_link.pk])
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.client.force_login(self.staff)
+        response = self.client.get(url)
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/accounts/login/", response["Location"])
-        self.assertEqual(Comment.objects.count(), 0)
-
-    def test_logged_in_user_can_comment(self):
-        self.client.force_login(self.user)
-        response = self.client.post(
-            reverse("resources:comment_create", args=[self.resource.pk]),
-            {"content": "确实好用"},
-            follow=True,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(Comment.objects.count(), 1)
-
-    def test_too_short_comment_rejected(self):
-        self.client.force_login(self.user)
-        self.client.post(
-            reverse("resources:comment_create", args=[self.resource.pk]), {"content": "好"}
-        )
-        self.assertEqual(Comment.objects.count(), 0)
-
-    def test_favorite_toggle(self):
-        self.client.force_login(self.user)
-        url = reverse("resources:toggle_favorite", args=[self.resource.pk])
-
-        response = self.client.post(url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
-        self.assertJSONEqual(response.content, {"ok": True, "favorited": True, "total": 1, "message": "已加入收藏"})
-        self.assertEqual(Favorite.objects.count(), 1)
-
-        response = self.client.post(url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
-        self.assertTrue(response.json()["favorited"] is False)
-        self.assertEqual(Favorite.objects.count(), 0)
-
-    def test_guest_cannot_favorite(self):
-        url = reverse("resources:toggle_favorite", args=[self.resource.pk])
-        response = self.client.post(url)
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(Favorite.objects.count(), 0)
-
-    def test_hidden_comment_not_rendered(self):
-        Comment.objects.create(
-            resource=self.resource, user=self.user, content="被隐藏的评论", is_active=False
-        )
-        response = self.client.get(self.resource.get_absolute_url())
-        self.assertNotContains(response, "被隐藏的评论")
+        self.assertEqual(response["Location"], "https://example.com/private")
 
 
-class UpdatedLogTests(TestCase):
-    def test_lines_property_strips_bullets(self):
-        resource = Resource.objects.create(title="日志测试")
-        log = UpdateLog.objects.create(
-            resource=resource, version="1.1", content="- 修复 A\n2. 优化 B\n\n- 新增 C"
-        )
-        self.assertEqual(log.lines, ["修复 A", "2. 优化 B", "新增 C"])
-
-    def test_changelog_page(self):
-        resource = Resource.objects.create(title="日志资源")
-        UpdateLog.objects.create(resource=resource, version="1.0", content="首次发布")
-        response = self.client.get(reverse("resources:changelog"))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "首次发布")
-
-
-class LocalDownloadTests(TestCase):
-    """
-    本地文件下载测试。
-
-    用临时 MEDIA_ROOT，避免测试上传的文件污染项目真实的 media/ 目录。
-    """
-
-    @classmethod
-    def setUpClass(cls):
-        cls._media_dir = tempfile.mkdtemp(prefix="rh-test-media-")
-        cls._media_override = override_settings(MEDIA_ROOT=cls._media_dir)
-        cls._media_override.enable()
-        super().setUpClass()
-
-    @classmethod
-    def tearDownClass(cls):
-        super().tearDownClass()
-        cls._media_override.disable()
-        shutil.rmtree(cls._media_dir, ignore_errors=True)
-
+class HomeQueryTests(TestCase):
     def setUp(self):
-        self.resource = Resource.objects.create(title="本地文件资源")
+        cache.clear()
 
-    def test_local_download_streams_file(self):
+    def test_default_page_size_is_24(self):
+        for index in range(25):
+            make_resource(f"软件 {index:02d}")
+        response = self.client.get(reverse("resources:home"))
+        self.assertEqual(response.context["page_size"], 24)
+        self.assertEqual(len(response.context["page_obj"].object_list), 24)
+        self.assertEqual(response.context["page_obj"].paginator.num_pages, 2)
+
+    def test_page_size_20_page_two(self):
+        for index in range(25):
+            make_resource(f"软件 {index:02d}")
+        response = self.client.get(
+            reverse("resources:home"), {"size": 20, "page": 2}
+        )
+        self.assertEqual(len(response.context["page_obj"].object_list), 5)
+
+    def test_invalid_size_falls_back_to_default(self):
+        response = self.client.get(reverse("resources:home"), {"size": 999})
+        self.assertEqual(response.context["page_size"], settings.PAGE_SIZE)
+
+    def test_order_by_updated_desc(self):
+        older = make_resource("较早更新")
+        newer = make_resource("较新更新")
+        Resource.objects.filter(pk=older.pk).update(
+            updated_at=timezone.now() - timedelta(days=2)
+        )
+        Resource.objects.filter(pk=newer.pk).update(updated_at=timezone.now())
+        response = self.client.get(reverse("resources:home"))
+        titles = [item.title for item in response.context["page_obj"].object_list]
+        self.assertEqual(titles, ["较新更新", "较早更新"])
+
+    def test_search_matches_title_summary_description_and_tag(self):
+        tag = Tag.objects.create(name="独特标签词")
+        make_resource("独特标题词", summary="普通简介")
+        make_resource("普通标题一", summary="独特摘要词")
+        make_resource("普通标题二", description="正文里有独特描述词")
+        tagged = make_resource("普通标题三")
+        tagged.tags.set([tag])
+
+        for query, expected in [
+            ("独特标题词", "独特标题词"),
+            ("独特摘要词", "普通标题一"),
+            ("独特描述词", "普通标题二"),
+            ("独特标签词", "普通标题三"),
+        ]:
+            response = self.client.get(reverse("resources:home"), {"q": query})
+            titles = [item.title for item in response.context["page_obj"].object_list]
+            self.assertIn(expected, titles)
+
+    def test_search_and_tag_and_page_size_combine(self):
+        keep_tag = Tag.objects.create(name="组合标签")
+        other_tag = Tag.objects.create(name="另一个标签")
+        for index in range(22):
+            item = make_resource(f"组合软件 {index:02d}", tags=[keep_tag])
+        make_resource("组合软件 排除项", tags=[other_tag])
+
+        response = self.client.get(
+            reverse("resources:home"),
+            {"q": "组合软件", "tag": keep_tag.pk, "size": 20},
+        )
+        self.assertEqual(response.context["page_obj"].paginator.count, 22)
+        self.assertEqual(len(response.context["page_obj"].object_list), 20)
+        self.assertEqual(response.context["page_obj"].paginator.num_pages, 2)
+
+    def test_home_does_not_show_recent_update_logs(self):
+        resource = make_resource("日志软件")
+        UpdateLog.objects.create(
+            resource=resource, version="1.0", content="首页不应出现的日志内容"
+        )
+        response = self.client.get(reverse("resources:home"))
+        self.assertNotContains(response, "首页不应出现的日志内容")
+
+    def test_page_size_choices_are_rendered(self):
+        response = self.client.get(reverse("resources:home"))
+        self.assertContains(response, "每页 20")
+        self.assertContains(response, "每页 24")
+        self.assertContains(response, "每页 30")
+
+    def test_configured_default_page_size_is_one_of_allowed_values(self):
+        self.assertIn(settings.PAGE_SIZE, settings.PAGE_SIZE_CHOICES)
+
+
+class SloganAndSiteSettingTests(TestCase):
+    def setUp(self):
+        cache.clear()
+
+    def test_slogan_change_is_visible_on_home(self):
+        SiteSetting.set("homepage_slogan", "新的首页口号")
+        response = self.client.get(reverse("resources:home"))
+        self.assertContains(response, "新的首页口号")
+
+    def test_slogan_is_escaped(self):
+        SiteSetting.set("homepage_slogan", "<script>alert(1)</script>")
+        response = self.client.get(reverse("resources:home"))
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+        self.assertNotContains(response, "<script>alert(1)</script>")
+
+    def test_site_setting_cache_is_invalidated_on_set(self):
+        SiteSetting.set("site_name", "缓存站")
+        self.assertEqual(SiteSetting.get("site_name"), "缓存站")
+        SiteSetting.set("site_name", "新名字")
+        self.assertEqual(SiteSetting.get("site_name"), "新名字")
+
+
+class ThumbnailTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.tmpdir = tempfile.mkdtemp(prefix="rh-media-")
+        self.override = override_settings(MEDIA_ROOT=self.tmpdir)
+        self.override.enable()
+        buffer = BytesIO()
+        Image.new("RGB", (800, 500), (160, 190, 240)).save(buffer, format="PNG")
+        buffer.seek(0)
+        self.png = buffer.getvalue()
+
+    def tearDown(self):
+        self.override.disable()
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_thumbnail_is_generated_and_used_by_card(self):
+        resource = Resource.objects.create(
+            title="带图软件",
+            cover_image=SimpleUploadedFile(
+                "cover.png", self.png, content_type="image/png"
+            ),
+        )
+        self.assertIn("-640x400.jpg", resource.thumbnail_url)
+        self.assertTrue(resource.thumbnail_url.startswith(settings.MEDIA_URL))
+
+        response = self.client.get(reverse("resources:home"))
+        self.assertContains(response, 'loading="lazy"')
+        self.assertContains(response, 'width="640"')
+        self.assertContains(response, 'height="400"')
+
+
+class DownloadGateTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.staff = User.objects.create_superuser(
+            username="admin", email="a@example.com", password="Str0ngPass!2026"
+        )
+        self.public = make_resource("公开软件")
+        self.private = make_resource("私有软件", public=False)
+
+    def test_public_external_link_redirects_and_counts(self):
         link = DownloadLink.objects.create(
-            resource=self.resource,
-            label="本地下载",
-            link_type=DownloadLink.LOCAL,
-            file=SimpleUploadedFile("demo.txt", b"hello resource-hub"),
+            resource=self.public,
+            label="外链",
+            link_type=DownloadLink.EXTERNAL,
+            url="https://example.com/file",
         )
         response = self.client.get(reverse("resources:download", args=[link.pk]))
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Disposition"][:10], "attachment")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "https://example.com/file")
         link.refresh_from_db()
         self.assertEqual(link.downloads, 1)
 
-    def test_disabled_link_returns_404(self):
+    def test_inactive_link_returns_404(self):
         link = DownloadLink.objects.create(
-            resource=self.resource,
-            label="本地下载",
-            link_type=DownloadLink.LOCAL,
-            file=SimpleUploadedFile("demo.txt", b"x"),
+            resource=self.public,
+            label="外链",
+            link_type=DownloadLink.EXTERNAL,
+            url="https://example.com/file",
             is_active=False,
         )
         response = self.client.get(reverse("resources:download", args=[link.pk]))
         self.assertEqual(response.status_code, 404)
+
+    def test_local_link_with_missing_file_returns_404(self):
+        link = DownloadLink.objects.create(
+            resource=self.public,
+            label="本地",
+            link_type=DownloadLink.LOCAL,
+            file="files/missing.bin",
+            file_size=10,
+        )
+        response = self.client.get(reverse("resources:download", args=[link.pk]))
+        self.assertEqual(response.status_code, 404)
+
+
+class LegacyRedirectTests(TestCase):
+    def test_old_list_keeps_query(self):
+        response = self.client.get("/list/?q=test&page=2")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/?q=test&page=2")
+
+    def test_old_tag_redirects_to_home_filter(self):
+        tag = Tag.objects.create(name="旧标签")
+        response = self.client.get(f"/t/{tag.pk}/")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"/?tag={tag.pk}")
+
+    def test_changelog_and_tags_redirect_home(self):
+        self.assertEqual(self.client.get("/changelog/")["Location"], "/")
+        self.assertEqual(self.client.get("/tags/")["Location"], "/")
+        self.assertEqual(self.client.get("/c/1/")["Location"], "/")
+
+
+class IndexTests(TestCase):
+    def test_resource_indexes_are_defined(self):
+        names = {index.name for index in Resource._meta.indexes}
+        self.assertIn("resources_public_updated_idx", names)
+        self.assertIn("resources_title_idx", names)

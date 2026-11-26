@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="{% block meta_description %}{{ site_subtitle }}{% endblock %}">
+  <meta name="description" content="{% block meta_description %}{{ site_slogan }}{% endblock %}">
   <meta name="color-scheme" content="light dark">
-  <title>{% block title %}{{ page_title|default:"首页" }}{% endblock %}{% if page_title %} · {% endif %}{{ site_name }}</title>
+  <title>{% block title %}{{ site_name }}{% endblock %}</title>
   <link rel="icon" href="{% static 'img/favicon-32.png' %}" sizes="32x32" type="image/png">
   <link rel="icon" href="{% static 'img/logo-128.png' %}" sizes="128x128" type="image/png">
   <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}">
@@ -31,26 +31,13 @@
         <span class="brand__mark">
           <img src="{% static 'img/logo-64.png' %}" alt="" width="30" height="30" decoding="async">
         </span>
-        <span class="brand__text">
-          <span class="brand__name">{{ site_name }}</span>
-          <span class="brand__sub">{{ site_subtitle }}</span>
-        </span>
+        <span class="brand__name">{{ site_name }}</span>
       </a>
 
       <nav class="main-nav" aria-label="主导航">
         <a href="{% url 'resources:home' %}" class="{% is_active 'home' %}">首页</a>
-        <a href="{% url 'resources:list' %}" class="{% is_active 'list' 'category' 'tag' %}">全部资源</a>
-        <a href="{% url 'resources:tags' %}" class="{% is_active 'tags' %}">分类标签</a>
-        <a href="{% url 'resources:changelog' %}" class="{% is_active 'changelog' %}">更新日志</a>
+        <a href="{% url 'core:about' %}" class="{% is_active 'about' %}">关于</a>
       </nav>
-
-      <form class="header-search" action="{% url 'resources:list' %}" method="get" role="search">
-        <span class="header-search__icon" aria-hidden="true">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        </span>
-        <label class="sr-only" for="header-q">搜索资源</label>
-        <input id="header-q" type="search" name="q" value="{{ query|default:'' }}" placeholder="搜索软件、版本或标签…" autocomplete="off">
-      </form>
 
       <div class="header-actions">
         <button class="icon-btn" type="button" data-theme-toggle title="切换主题">
@@ -58,34 +45,10 @@
           <span class="sr-only">切换主题</span>
         </button>
 
-        {% if user.is_authenticated %}
-          <div class="dropdown">
-            <button class="icon-btn" type="button" data-dropdown-trigger aria-haspopup="true" aria-expanded="false" title="{{ user.display_name }}">
-              {% if user.avatar %}
-                <img class="avatar avatar--sm" src="{{ user.avatar.url }}" alt="{{ user.display_name }}">
-              {% else %}
-                <span class="avatar avatar--sm">{{ user.initial }}</span>
-              {% endif %}
-            </button>
-            <div class="dropdown__menu" role="menu">
-              <a role="menuitem" href="{% url 'accounts:profile' %}">个人中心</a>
-              <a role="menuitem" href="{% url 'accounts:profile' %}?tab=favorites">我的收藏</a>
-              <a role="menuitem" href="{% url 'accounts:profile_edit' %}">编辑资料</a>
-              <a role="menuitem" href="{% url 'accounts:password_change' %}">修改密码</a>
-              {% if user.is_staff %}
-                <div class="dropdown__divider"></div>
-                <a role="menuitem" href="{% url 'admin:index' %}">管理后台</a>
-              {% endif %}
-              <div class="dropdown__divider"></div>
-              <form method="post" action="{% url 'accounts:logout' %}">
-                {% csrf_token %}
-                <button type="submit" role="menuitem">退出登录</button>
-              </form>
-            </div>
-          </div>
-        {% else %}
-          <a class="btn btn--sm" href="{% url 'accounts:login' %}">登录</a>
-          <a class="btn btn--sm btn--primary" href="{% url 'accounts:register' %}">注册</a>
+        {% if user.is_authenticated and user.is_staff %}
+          <a class="btn btn--sm btn--primary" href="{% url 'manage:index' %}">管理后台</a>
+        {% elif request.resolver_match.url_name != 'login' %}
+          <a class="btn btn--sm" href="{% url 'accounts:login' %}">管理员登录</a>
         {% endif %}
       </div>
     </div>
@@ -107,17 +70,8 @@
 
   <footer class="site-footer">
     <div class="container site-footer__inner">
-      <div>
-        <p>© {% now "Y" %} {{ site_name }} · 由 Django 驱动</p>
-        <p>{{ site_footer }}</p>
-      </div>
-      <nav class="site-footer__links" aria-label="页脚导航">
-        <a href="{% url 'resources:home' %}">首页</a>
-        <a href="{% url 'resources:list' %}">全部资源</a>
-        <a href="{% url 'resources:changelog' %}">更新日志</a>
-        <a href="{% url 'core:about' %}">关于本站</a>
-        {% if user.is_staff %}<a href="{% url 'admin:index' %}">管理后台</a>{% endif %}
-      </nav>
+      <span>© {% now "Y" %} {{ site_name }}</span>
+      <a href="{% url 'core:about' %}">关于本站</a>
     </div>
   </footer>
 

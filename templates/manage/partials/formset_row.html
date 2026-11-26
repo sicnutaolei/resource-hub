@@ -1,0 +1,18 @@
+<div class="formset__row">
+  {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+  <div class="formset__grid">
+    {% for field in form.visible_fields %}
+      {% if field.name != 'DELETE' %}
+        <div class="field {% if field.errors %}has-error{% endif %}">
+          <label class="field__label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}<div class="field__error">{{ field.errors.0 }}</div>{% endif %}
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% if form.DELETE %}
+    <label class="field__check">{{ form.DELETE }} 删除这一条</label>
+  {% endif %}
+  {% if form.non_field_errors %}<div class="field__error">{{ form.non_field_errors.0 }}</div>{% endif %}
+</div>

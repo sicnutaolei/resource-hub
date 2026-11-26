@@ -22,6 +22,11 @@ class User(AbstractUser):
         validators=[validate_image_upload],
     )
     bio = models.CharField("一句话简介", max_length=200, blank=True)
+    must_change_password = models.BooleanField(
+        "首次登录须修改密码",
+        default=False,
+        help_text="自动创建的管理员会置为 True，改密成功后自动清除",
+    )
 
     class Meta:
         verbose_name = "用户"

@@ -1,62 +1,56 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}关于本站{% endblock %}
+{% block title %}关于 · {{ site_name }}{% endblock %}
 
 {% block content %}
-  <nav class="breadcrumb" aria-label="面包屑">
-    <a href="{% url 'resources:home' %}">首页</a>
-    <span>/</span>
-    <span>关于本站</span>
-  </nav>
-
-  <div class="layout">
-    {% include "resources/partials/sidebar.html" %}
-
-    <div>
-      <div class="panel about-brand" style="margin-bottom:var(--space-5)">
-        <picture>
-          <source srcset="{% static 'img/logo-full-512.webp' %}" type="image/webp">
-          <img src="{% static 'img/logo-full-256.png' %}" alt="{{ site_name }} 的标志" width="256" height="256" loading="lazy" decoding="async">
-        </picture>
-        <div>
-          <h2 class="section__title" style="margin-bottom:var(--space-3)">关于 {{ site_name }}</h2>
-          <div class="prose">{{ site_subtitle }}</div>
-        </div>
-      </div>
-
-      <div class="panel" style="margin-bottom:var(--space-5)">
-        <h2 class="section__title" style="margin-bottom:var(--space-3)">关于 {{ site_name }}</h2>
-        <div class="prose">这里收录站长亲测可用的纯净软件与工具：没有捆绑安装包，没有全家桶，没有改主页。
-
-每个资源都会写清楚版本号、本版特点和更新日志。能直链的走服务器本地下载，体积大的走网盘外链，并注明提取码。
-
-资源全部来自官方或可信来源，仅供学习交流使用，请勿用于商业用途。如有侵权，请联系站长删除。</div>
-
-        <div class="hero__stats" style="margin-top:var(--space-5)">
-          <div class="hero__stat"><b>{{ stats.resources }}</b><span>已收录资源</span></div>
-          <div class="hero__stat"><b>{{ stats.categories }}</b><span>个分类</span></div>
-          <div class="hero__stat"><b>{{ stats.logs }}</b><span>条更新记录</span></div>
-        </div>
-      </div>
-
-      <div class="panel" style="margin-bottom:var(--space-5)">
-        <h2 class="section__title" style="margin-bottom:var(--space-3)">下载说明</h2>
-        <ul class="spec-list" style="gap:var(--space-3)">
-          <li><span>本地直链</span><span>直接点击下载，速度快，不会失效</span></li>
-          <li><span>网盘外链</span><span>需跳转第三方网盘，建议先转存再下载</span></li>
-          <li><span>链接失效</span><span>在资源页留言，站长会尽快补档</span></li>
-        </ul>
-      </div>
-
-      <div class="panel">
-        <h2 class="section__title" style="margin-bottom:var(--space-3)">技术信息</h2>
-        <ul class="spec-list" style="gap:var(--space-3)">
-          <li><span>后端</span><span>Django + SQLite</span></li>
-          <li><span>部署</span><span>Docker 容器，媒体文件挂载为数据卷</span></li>
-          <li><span>主题</span><span>支持浅色 / 深色 / 跟随系统三态切换</span></li>
-        </ul>
-      </div>
+  <article class="readme">
+    <div class="readme__hero">
+      <img src="{% static 'img/logo-full-256.png' %}" alt="{{ site_name }}" width="120" height="120" loading="lazy" decoding="async">
+      <h1>Hi 👋 这里是 {{ site_name }}</h1>
+      <p class="readme__tagline">{{ site_slogan }}</p>
+      <p class="readme__badges">
+        <span class="badge badge--blue">Django</span>
+        <span class="badge badge--blue">Python</span>
+        <span class="badge badge--blue">SQLite</span>
+        <span class="badge badge--blue">Docker</span>
+      </p>
     </div>
-  </div>
+
+    <hr>
+
+    <h2>📌 关于本站</h2>
+    <ul>
+      <li>🔭 只收录干净、无捆绑的软件与效率工具。</li>
+      <li>🌱 本地直链优先，体积较大的走第三方网盘外链。</li>
+      <li>🧩 以资源库分类、以标签筛选，查找更直接。</li>
+      <li>⚡ 极简界面，无广告、无冗余说明。</li>
+    </ul>
+
+    <hr>
+
+    <h2>📦 收录与下载</h2>
+    <ul>
+      <li><b>本地直链</b>：直接点击下载，速度快。</li>
+      <li><b>网盘外链</b>：跳转第三方网盘，建议先转存再下载。</li>
+      <li><b>更新日志</b>：每个软件详情页记录版本变化。</li>
+      <li><b>失效反馈</b>：外链失效会标注「疑似失效」，请以实际为准。</li>
+    </ul>
+
+    <hr>
+
+    <h2>🧱 技术栈</h2>
+    <p class="readme__stack"><code>Django</code> · <code>Python</code> · <code>SQLite</code> · <code>Docker</code> · <code>Nginx</code></p>
+
+    <details>
+      <summary>📈 更多 / More</summary>
+      <ul>
+        <li>已收录公开软件：<b>{{ stats.software }}</b></li>
+        <li>资源库：<b>{{ stats.libraries }}</b></li>
+        <li>标签：<b>{{ stats.tags }}</b></li>
+        <li>可用下载入口：<b>{{ stats.downloads }}</b></li>
+      </ul>
+      <p class="muted">本站仅做软件整理与分享，资源版权归原作者所有。如有侵权，请联系管理员删除。</p>
+    </details>
+  </article>
 {% endblock %}

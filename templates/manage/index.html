@@ -1,0 +1,97 @@
+{% extends "manage/base.html" %}
+
+{% block page_title %}概览{% endblock %}
+
+{% block content %}
+  <div class="mg-stats">
+    <div class="mg-stat">
+      <span class="mg-stat__label">软件总数</span>
+      <b class="mg-stat__value">{{ counts.software }}</b>
+    </div>
+    <div class="mg-stat">
+      <span class="mg-stat__label">公开</span>
+      <b class="mg-stat__value">{{ counts.public }}</b>
+    </div>
+    <div class="mg-stat">
+      <span class="mg-stat__label">非公开</span>
+      <b class="mg-stat__value">{{ counts.private }}</b>
+    </div>
+    <div class="mg-stat">
+      <span class="mg-stat__label">资源库</span>
+      <b class="mg-stat__value">{{ counts.libraries }}</b>
+    </div>
+    <div class="mg-stat">
+      <span class="mg-stat__label">标签</span>
+      <b class="mg-stat__value">{{ counts.tags }}</b>
+    </div>
+    <div class="mg-stat {% if counts.broken_links %}mg-stat--warn{% endif %}">
+      <span class="mg-stat__label">疑似失效外链</span>
+      <b class="mg-stat__value">{{ counts.broken_links }}</b>
+    </div>
+  </div>
+
+  <div class="mg-quick">
+    <a class="btn btn--primary" href="{% url 'manage:software_create' %}">+ 新增软件</a>
+    <a class="btn" href="{% url 'manage:library_create' %}">+ 新增资源库</a>
+    <a class="btn" href="{% url 'manage:settings' %}">站点设置</a>
+  </div>
+
+  <section class="mg-card">
+    <div class="mg-card__head">
+      <h2>最近更新</h2>
+      <a class="mg-link" href="{% url 'manage:software_list' %}">全部软件 →</a>
+    </div>
+
+    {% if recent %}
+      <div class="mg-table-wrap">
+        <table class="mg-table">
+          <thead>
+            <tr>
+              <th>软件</th>
+              <th>资源库</th>
+              <th>状态</th>
+              <th>更新时间</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in recent %}
+              <tr>
+                <td>
+                  <div class="mg-softcell">
+                    <span class="mg-thumb">
+                      {% if item.cover_image %}
+                        <img src="{{ item.thumbnail_url }}" alt="" width="64" height="40" loading="lazy">
+                      {% else %}
+                        <span>{{ item.title|slice:":1" }}</span>
+                      {% endif %}
+                    </span>
+                    <span>
+                      <span class="mg-softcell__title">{{ item.title }}</span>
+                      <span class="mg-softcell__sub">{{ item.display_summary|truncatechars:48 }}</span>
+                    </span>
+                  </div>
+                </td>
+                <td>{{ item.category.name|default:"未分类" }}</td>
+                <td>
+                  {% if item.is_public %}
+                    <span class="badge badge--public">公开</span>
+                  {% else %}
+                    <span class="badge badge--private">非公开</span>
+                  {% endif %}
+                </td>
+                <td class="muted">{{ item.updated_at|date:"Y-m-d H:i" }}</td>
+                <td class="mg-table__actions"><a class="mg-link" href="{% url 'manage:software_edit' item.pk %}">编辑</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="mg-empty">
+        <p>还没有软件，先添加第一个吧。</p>
+        <a class="btn btn--primary" href="{% url 'manage:software_create' %}">新增软件</a>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

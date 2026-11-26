@@ -1,14 +1,18 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block title %}登录{% endblock %}
+{% block title %}管理员登录 · {{ site_name }}{% endblock %}
 
 {% block content %}
-  <div class="form-narrow">
-    <div class="form-card">
-      <div class="form-card__head">
-        <h1>登录 {{ site_name }}</h1>
-        <p>登录后可以收藏资源和参与评论</p>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-card__brand">
+        <img src="{% static 'img/logo-64.png' %}" alt="" width="36" height="36" decoding="async">
+        <span>{{ site_name }}</span>
       </div>
+
+      <h1>管理员登录</h1>
+      <p class="muted auth-card__desc">仅管理员账号可登录。访客无需登录即可浏览和下载公开软件。</p>
 
       <form method="post" novalidate>
         {% csrf_token %}
@@ -35,8 +39,8 @@
         <button class="btn btn--primary btn--block btn--lg" type="submit">登录</button>
       </form>
 
-      <div class="form-foot">
-        还没有账号？<a href="{% url 'accounts:register' %}">立即注册</a>
+      <div class="auth-card__foot">
+        <a href="{% url 'resources:home' %}">返回首页</a>
       </div>
     </div>
   </div>

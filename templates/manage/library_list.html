@@ -1,0 +1,56 @@
+{% extends "manage/base.html" %}
+
+{% block page_title %}资源库{% endblock %}
+
+{% block content %}
+  <section class="mg-panel">
+    <div class="mg-panel__top">
+      <div>
+        <p class="muted">资源库只做分类管理；软件是否公开只看软件自身的「公开」开关。</p>
+      </div>
+      <a class="btn btn--primary" href="{% url 'manage:library_create' %}">+ 新增资源库</a>
+    </div>
+
+    {% if libraries %}
+      <div class="mg-table-wrap">
+        <table class="mg-table">
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>描述</th>
+              <th>排序</th>
+              <th>软件数</th>
+              <th class="mg-table__actions">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for lib in libraries %}
+              <tr>
+                <td><b>{{ lib.name }}</b></td>
+                <td class="muted">{{ lib.description|default:"—" }}</td>
+                <td class="muted">{{ lib.order }}</td>
+                <td>{{ lib.total }}</td>
+                <td class="mg-table__actions">
+                  <a class="mg-link" href="{% url 'manage:library_edit' lib.pk %}">编辑</a>
+                  {% if lib.total == 0 %}
+                    <form method="post" action="{% url 'manage:library_delete' lib.pk %}" data-confirm="确认删除资源库「{{ lib.name }}」？">
+                      {% csrf_token %}
+                      <button class="mg-link mg-link--danger" type="submit">删除</button>
+                    </form>
+                  {% else %}
+                    <span class="muted small">需先移走软件</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="mg-empty">
+        <p>还没有资源库。</p>
+        <a class="btn btn--primary" href="{% url 'manage:library_create' %}">新增资源库</a>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

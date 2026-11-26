@@ -1,0 +1,52 @@
+{% extends "manage/base.html" %}
+
+{% block page_title %}标签{% endblock %}
+
+{% block content %}
+  <section class="mg-panel">
+    <div class="mg-panel__top">
+      <div>
+        <p class="muted">首页横向筛选标签固定取自这张表；软件编辑页也可以直接输入新标签。</p>
+      </div>
+      <a class="btn btn--primary" href="{% url 'manage:tag_create' %}">+ 新增标签</a>
+    </div>
+
+    {% if tags %}
+      <div class="mg-table-wrap">
+        <table class="mg-table">
+          <thead>
+            <tr>
+              <th>标签</th>
+              <th>软件数</th>
+              <th class="mg-table__actions">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tag in tags %}
+              <tr>
+                <td><span class="mg-tag">{{ tag.name }}</span></td>
+                <td>{{ tag.total }}</td>
+                <td class="mg-table__actions">
+                  <a class="mg-link" href="{% url 'manage:tag_edit' tag.pk %}">编辑</a>
+                  {% if tag.total == 0 %}
+                    <form method="post" action="{% url 'manage:tag_delete' tag.pk %}" data-confirm="确认删除标签「{{ tag.name }}」？">
+                      {% csrf_token %}
+                      <button class="mg-link mg-link--danger" type="submit">删除</button>
+                    </form>
+                  {% else %}
+                    <span class="muted small">使用中</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="mg-empty">
+        <p>还没有标签。</p>
+        <a class="btn btn--primary" href="{% url 'manage:tag_create' %}">新增标签</a>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

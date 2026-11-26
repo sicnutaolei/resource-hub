@@ -1,244 +1,242 @@
-# resource-hub
+# 资源小站 · SaaS 工具型资源库
 
-个人资源分享站：分享干净、无捆绑的软件与工具。参考成熟「资源站」的信息架构（卡片列表 + 分类侧栏 + 详情页下载区 + 更新日志），视觉与交互全新实现。
+基于 Django 5.2 + SQLite 的轻量软件资源站。前台只展示公开软件，后台是自建的简约
+SaaS 工具界面：左侧窄侧边栏、顶部搜索、横向筛选标签、圆角卡片网格。
 
-- 游客可浏览、可直接下载，**无需登录**
-- 注册后可**收藏**资源、**发表评论**
-- 管理员登录后进入后台，管理分类 / 标签 / 资源 / 下载链接 / 更新日志 / 评论
-- 浅色 / 深色 / 跟随系统 三态主题，零外部 CDN 依赖，无网络也能正常显示
+当前维护分支：**SaaSUI**。
 
-## 技术栈
+---
 
-| 项目 | 选择 | 说明 |
-|---|---|---|
-| 后端 | Django 5.2 LTS | 唯一在维护的 LTS，支持到 2028-04 |
-| Python | 3.13 | Django 5.2 支持 3.10 – 3.14 |
-| 数据库 | SQLite（WAL 模式） | 几百资源 + 几十用户的规模完全够用 |
-| 前端 | Django 模板 + 手写 CSS 设计系统 | 无 Tailwind / 无 CDN，静态资源自托管 |
-| WSGI | Gunicorn | 3 个 worker |
-| 静态资源 | WhiteNoise | 不需要额外挂 nginx |
-| 部署 | Docker + docker-compose | 默认端口 **8082** |
+## 功能
 
-## 功能一览
+### 前台
 
-- **资源条目**：名称、版本号、分类、标签、封面图、卡片摘要、详细介绍
-- **多个下载入口**：同一个资源可同时挂「本地直链」和多个「网盘外链」
-  - 本地文件走 `FileResponse` 流式下载，并校验路径必须落在媒体目录内
-  - 外链可填**提取码**，前端一键复制
-- **更新日志**：每个资源可记录多个版本的改动，详情页时间线展示，另有全站日志汇总页
-- **搜索与筛选**：按标题 / 摘要 / 正文 / 版本 / 标签搜索，支持分类、标签、排序（最近更新 / 最新收录 / 最多浏览）
-- **收藏与评论**：登录用户可用，评论支持管理员隐藏
-- **外链失效检查**：后台批量检测 + 命令行 `check_links`，默认只出报告，加 `--apply` 才写库
-- **浏览量 / 下载量统计**：用 `F()` 表达式自增，避免并发读改写竞态
-- **上传校验**：单文件体积上限 + 图片格式白名单（挡掉可执行脚本的 SVG）
-- **健康检查**：`/healthz` 供容器编排与监控使用
+- 首页只展示公开软件，服务端分页（每页 20 / 24 / 30），默认按更新时间倒序。
+- 搜索覆盖软件名称、简短标题、描述、标签；搜索 / 标签筛选 / 分页全部走服务端。
+- 横向筛选标签固定取自标签表，单选，和搜索、分页可组合。
+- 等宽卡片网格：顶部预览缩略图，底部一行标题，超出截断。
+- 缩略图自动生成（640×400），`loading="lazy"`，固定宽高比，避免布局抖动。
+- 首页不展示更新日志；只保留站点名和一句可在后台修改的 slogan。
+- 深色 / 浅色 / 跟随系统主题切换。
+- 关于页采用 README 风格，内容精炼。
+
+### 后台 `/manage/`
+
+- 概览：软件总数、公开 / 非公开数量、资源库、标签、疑似失效外链。
+- 软件管理：搜索 + 公开状态筛选 + 资源库筛选组合；新增 / 编辑 / 删除。
+- 软件编辑：基本信息、封面、标签、下载链接（本地文件或网盘外链）、更新日志。
+- **是否公开**开关（`is_public`，默认公开）。非公开软件只对已登录管理员可见。
+- 资源库管理：仅做分类；资源库下还有软件时禁止删除，避免影响软件归属。
+- 标签管理：首页筛选标签来源；被软件使用时禁止删除。
+- 站点设置：修改站点名称与首页 slogan，保存后缓存立即失效。
+- 账号安全：修改管理员密码；自动创建的管理员首次登录必须先改密。
+
+### 已移除
+
+- 注册页面 / 注册 API / 注册入口全部删除（访问 `/accounts/register/` 返回 404）。
+- Django admin 整体移除（`/admin/` 仅 302 跳转到 `/manage/`）。
+- 权限管理、组管理不再有菜单 / 路由 / 页面 / API；`auth_group`、`auth_permission`
+  表保留但不再使用。
+- 普通用户注册、收藏、评论入口从前台移除；相关数据表保留以兼容旧数据。
+
+---
+
+## 快速开始（Docker）
+
+```bash
+cp .env.example .env
+# 至少修改 SECRET_KEY 和 ALLOWED_HOSTS
+docker compose up -d --build
+docker compose logs -f web
+```
+
+首次部署时 `ensure_admin` 会创建管理员并打印一次初始密码：
+
+```
+====================================================================
+  管理员账号已创建
+  用户名：admin
+  初始密码：xxxxxxxxxxxxxxxx
+  首次登录后必须修改密码；此密码只在本次日志中输出一次。
+====================================================================
+```
+
+打开 `http://<宿主机IP>:8082/manage/`，用上面的账号登录，按提示修改密码。
+
+> 如果数据库里已经有超级管理员，重建容器不会重置密码，也不会再打印凭据。
+
+重置已有管理员密码：
+
+```bash
+docker compose exec web python manage.py ensure_admin --update-password
+```
+
+---
+
+## 数据与备份
+
+| 内容 | 容器内路径 | 宿主机路径 |
+| --- | --- | --- |
+| SQLite 数据库 | `/app/data/db.sqlite3` | `./data/db.sqlite3` |
+| 迁移前备份 | `/app/data/backups/` | `./data/backups/` |
+| 封面 / 本地文件 | `/app/media/` | `./media/` |
+| 站点设置缓存 | `/app/data/cache/` | `./data/cache/` |
+
+- 容器每次启动都会先执行 `python manage.py backup_db`，再做数据库迁移。
+- 备份使用 SQLite 在线备份 API（包含 WAL 内容），默认保留最近 20 份。
+- 升级时保留 `./data` 与 `./media` 即可保留全部数据。
+
+手动备份：
+
+```bash
+docker compose exec web python manage.py backup_db
+```
+
+---
+
+## 可见性与安全
+
+- 未登录访客：首页、搜索、标签筛选、详情、下载接口只能访问 `is_public=true` 的软件。
+- 非公开软件：未登录访客访问详情或下载统一返回 **404**，不泄露是否存在。
+- 只有管理员（`is_staff` / `is_superuser`）可以登录；普通用户会被登录表单拒绝，
+  旧的普通用户会话会被中间件立刻注销。
+- 非管理员账号在迁移和 `ensure_admin` 时被停用（数据保留）。
+- 站点名称与 slogan 在模板中自动转义，后台保存时也会剥离 HTML 标签。
+- 管理员首次登录必须改密（`must_change_password`），改密后才可进入后台其他页面。
+
+---
+
+## 首页查询与缓存
+
+- 默认每页 24 条，可通过 `?size=20|24|30` 切换。
+- 搜索参数 `q`、标签 `tag`、分页 `page`、每页条数 `size` 全部由服务端处理。
+- 站点设置与筛选标签使用共享文件缓存（`data/cache/`），多 gunicorn worker 都能立即
+  读到后台保存的新值；标签缓存 TTL 60 秒，站点设置缓存 TTL 300 秒并在保存时主动失效。
+
+---
+
+## 数据库与索引
+
+- `resources_resource`：
+  - `is_public + updated_at` 组合索引：`resources_public_updated_idx`
+  - 软件名称索引：`resources_title_idx`
+- 迁移 `resources.0003` 把旧字段 `is_published` **重命名**为 `is_public`，保留历史值。
+- 缩略图不落数据库字段，按 `covers/.../thumbs/<name>-640x400.jpg` 规则生成并缓存。
+
+---
+
+## 部署到 krypton（覆盖现有实例）
+
+现有实例目录：`/vol1/1000/docker/resource-hub`，容器名 `resource-hub`，端口 `8082`。
+
+```bash
+ssh taolei@192.168.195.107
+cd /vol1/1000/docker/resource-hub
+
+# 1) 先做一次在线备份（容器运行中也可安全执行）
+docker compose exec -T web python -c "import sqlite3,pathlib,datetime; p=pathlib.Path('/app/data/backups'); p.mkdir(parents=True, exist_ok=True); d=datetime.datetime.now().strftime('%Y%m%d-%H%M%S'); s=sqlite3.connect('/app/data/db.sqlite3'); t=sqlite3.connect(str(p/f'db-{d}.sqlite3')); s.backup(t); t.close(); s.close(); print('backup ok')"
+
+# 2) 拉取 SaaSUI 分支并重建
+git fetch origin
+git checkout SaaSUI
+git pull --ff-only origin SaaSUI
+
+# 3) 覆盖部署（data / media 是 bind mount，不会丢）
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail 40 web
+```
+
+启动日志应包含：
+
+- `数据库已备份：/app/data/backups/db-...sqlite3`
+- `管理员已存在（admin），跳过初始化，不会重置密码。`（已有管理员时）
+- `已写入默认站点设置...`（首次升级）
+- gunicorn 正常监听 8082
+
+验证：
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8082/healthz   # 200
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8082/accounts/register/  # 404
+```
+
+---
+
+## 环境变量
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `SECRET_KEY` | 无（生产必填） | Django 密钥 |
+| `ADMIN_USERNAME` | `admin` | 管理员用户名 |
+| `ADMIN_PASSWORD` | 空 | 空则首次部署自动生成并打印一次 |
+| `ADMIN_EMAIL` | 空 | 管理员邮箱 |
+| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | 允许的域名 / IP |
+| `DEBUG` | `False` | 生产保持 False |
+| `SITE_NAME` | `资源小站` | 站点名称初始值 |
+| `SITE_SUBTITLE` | `只分享干净、无捆绑的资源` | 站点副标题初始值 |
+| `SITE_SLOGAN` | 同 `SITE_SUBTITLE` | 首页 slogan 初始值 |
+| `PAGE_SIZE` | `24` | 首页默认每页条数（20/24/30） |
+| `SECURE_COOKIES` | `False` | HTTPS 反代时设为 True |
+| `SERVE_MEDIA` | `True` | 由 Django 提供 /media/ |
+| `DB_PATH` | `/app/data/db.sqlite3` | SQLite 路径 |
+| `CACHE_DIR` | `/app/data/cache` | 共享文件缓存目录 |
+| `PORT` | `8082` | 容器内端口 |
+| `GUNICORN_WORKERS` | `3` | gunicorn 进程数 |
+
+---
+
+## 常用命令
+
+```bash
+# 本地开发（Windows PowerShell）
+$env:DEBUG = "True"
+$env:DB_PATH = "E:\...\resource-hub\.venv\dev.sqlite3"
+$env:MEDIA_ROOT = "E:\...\resource-hub\.venv\media-dev"
+python manage.py migrate
+python manage.py ensure_admin
+python manage.py init_site
+python manage.py runserver 127.0.0.1:8090
+
+# 测试
+$env:DEBUG = "True"
+python manage.py test
+
+# 演示数据（仅本地）
+python manage.py seed_demo
+```
+
+---
 
 ## 目录结构
 
 ```
-resource-hub/
-├── config/                 项目配置（settings 全部读环境变量）
-├── accounts/               用户：自定义 User、注册、登录、个人中心
-├── resources/              核心业务：分类/标签/资源/下载链接/更新日志/评论/收藏
-│   ├── context_processors.py   侧栏分类与标签注入全站
-│   ├── utils.py                外链探测（仅用标准库 urllib）
-│   └── management/commands/    check_links.py（外链检测）、seed_demo.py（演示数据）
-├── core/                   站点功能：关于、健康检查、robots、上传校验、ensure_admin 命令
-├── templates/              全部模板
-├── static/css/             tokens.css（设计变量）+ main.css
-├── static/js/              theme.js（主题）+ main.js（交互）
-├── static/img/             站点 Logo：SVG 源图 + 各尺寸 PNG/WebP（页头、favicon、关于页大图）
-├── media/                  ★ 上传的封面图与本地文件（Docker volume）
-├── data/                   ★ SQLite 数据库（Docker volume）
-├── Dockerfile
-├── docker-compose.yml
-├── entrypoint.sh           迁移 → 建管理员 → 收集静态 → 启动 gunicorn
-└── requirements.txt
+config/             # 项目配置与根路由
+accounts/           # 管理员登录 / 注销（注册已移除）
+resources/          # 软件、资源库、标签、下载链接、更新日志
+core/               # 站点设置、健康检查、关于页、中间件、初始化/备份命令
+dashboard/          # 自建 SaaS 后台（/manage/）
+templates/
+  resources/        # 首页、详情、卡片、分页
+  manage/           # 后台布局与页面
+  accounts/         # 管理员登录
+static/css/         # tokens / main / manage
+static/js/          # theme / main / manage
+data/               # SQLite、备份、缓存（git 忽略）
+media/              # 封面、缩略图、本地文件（git 忽略）
 ```
 
-## 快速开始（Docker 部署）
+---
 
-```bash
-# 1. 拉取代码
-git clone git@github.com:sicnutaolei/resource-hub.git
-cd resource-hub
+## 验收清单
 
-# 2. 配置环境变量
-cp .env.example .env
-# 生成一个 SECRET_KEY 填进去：
-python -c "from django.core.management.utils import get_random_secret_key as g; print(g())"
-
-# 3. 启动
-docker compose up -d --build
-
-# 4. 查看日志，确认迁移与管理员创建成功
-docker compose logs -f
-```
-
-打开 `http://<服务器IP>:8082` 即可访问（需把该 IP 写进 `.env` 的 `ALLOWED_HOSTS`，否则 Django 返回 400），后台在 `http://<服务器IP>:8082/admin/`。
-
-### 线上入口：mefcl.taolei.dynv6.net
-
-生产环境通过飞牛 NAS 上的 nginx 反代暴露，容器本身只监听 8082：
-
-```
-浏览器 ──https://443──> nginx (mefcl.taolei.dynv6.net)
-                             └─http──> 127.0.0.1:8082 ──> gunicorn (容器)
-```
-
-| 访问方式 | 地址 | 说明 |
-|---|---|---|
-| 正式入口 | `https://mefcl.taolei.dynv6.net/` | nginx 终止 HTTPS，泛域名证书自动覆盖 |
-| 内网直连 | `http://192.168.2.165:8082/` | 调试用，需 IP 在 `ALLOWED_HOSTS` 内 |
-
-对应配置：
-
-- nginx 站点配置：`/vol1/1000/docker/reverse-proxy/conf.d/22-resource-hub.conf`
-- `.env` 里 `ALLOWED_HOSTS` 必须包含 `mefcl.taolei.dynv6.net`
-- `.env` 里 `USE_X_FORWARDED_PROTO=True`，让 Django 正确识别 https
-- nginx 的 `client_max_body_size` 要 ≥ `MAX_UPLOAD_SIZE_MB`，否则大文件上传会被网关截断
-
-### 首次启动后必须做的事
-
-默认管理员是 `admin` / `admin123`（来自 `.env.example`），**这个密码必须立刻改掉**：
-
-```bash
-# 1. 修改 .env 中的 ADMIN_PASSWORD 为强密码
-# 2. 让它生效
-docker compose exec web python manage.py ensure_admin --update-password
-```
-
-> `.env` 已在 `.gitignore` 中排除，真实密码不会被提交到仓库。
-> `ensure_admin` 是幂等的：账号已存在时不会覆盖密码，除非显式加 `--update-password`。
-
-### 数据持久化
-
-`docker-compose.yml` 里挂载了两个目录，**容器重建不会丢数据**：
-
-| 宿主机 | 容器内 | 内容 |
-|---|---|---|
-| `./data` | `/app/data` | SQLite 数据库 |
-| `./media` | `/app/media` | 封面图 + 本地小文件 |
-
-备份只需打包这两个目录：
-
-```bash
-tar czf resource-hub-backup-$(date +%F).tar.gz data media .env
-```
-
-飞牛 NAS 等环境可以把它们换成绝对路径，例如 `- /vol1/1000/docker/resource-hub/data:/app/data`。
-
-## 环境变量
-
-完整清单见 `.env.example`，常用的几个：
-
-| 变量 | 默认值 | 说明 |
-|---|---|---|
-| `SECRET_KEY` | 无（**必填**） | Django 密钥。`DEBUG=False` 时未提供会直接拒绝启动，防止带着默认密钥上线 |
-| `ADMIN_USERNAME` | `admin` | 管理员用户名 |
-| `ADMIN_PASSWORD` | 无（必填） | 管理员密码，**只从环境变量读，不写进代码** |
-| `DEBUG` | `False` | 生产必须保持 False |
-| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | 允许的域名 / IP 白名单。**没填就 400**，换 IP 后要同步更新 |
-| `CSRF_TRUSTED_ORIGINS` | 空 | 仅跨域 POST 才需要；同域访问不用填 |
-| `USE_X_FORWARDED_PROTO` | `False` | 前面有 nginx 终止 https 时设 `True` |
-| `SITE_NAME` | `资源小站` | 站名，显示在页头与页脚 |
-| `PAGE_SIZE` | `12` | 列表页每页条数 |
-| `SERVE_MEDIA` | `True` | True 由 Django 提供 `/media/`；交给前置 nginx 时设 False |
-| `GUNICORN_WORKERS` | `3` | gunicorn 进程数 |
-
-## 日常使用（后台操作）
-
-1. 登录 `/admin/`
-2. **资源库 → 分类**：先建几个分类（数字越小越靠前）
-3. **资源库 → 标签**：建标签，例如「绿色版」「便携免安装」「开源免费」
-4. **资源库 → 资源 → 新增**：
-   - 填名称、版本号、分类、标签、卡片摘要、详细介绍
-   - 页面下方的 **下载链接** 内联区：选「本地文件」就上传文件，选「外部链接」就填网盘地址和提取码
-   - **更新日志** 内联区：一条记录写一个版本，内容一行一条
-   - `首页置顶` 勾上就出现在首页顶部「站长推荐」
-5. 列表页可直接勾选「已发布 / 首页置顶」批量修改，也有批量发布、批量下架、批量置顶、检查外链的批量操作
-
-### 外链失效检查
-
-```bash
-# 默认只出报告，不改数据库
-docker compose exec web python manage.py check_links
-
-# 只复检上轮标记为失效的
-docker compose exec web python manage.py check_links --only-broken
-
-# 确认规则无误后再写回
-docker compose exec web python manage.py check_links --apply
-```
-
-后台「资源」和「下载链接」列表页也有对应的批量操作。
-
-> 说明：检测只能判断链接**能否访问**。网盘分享过期后部分平台仍返回 200，所以结果仅供参考。标记为失效只是在详情页多一个「疑似失效」徽标，**不会自动删除或隐藏链接**。
-
-## 本地开发
-
-```bash
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-cp .env.example .env               # 把 DEBUG 改成 True
-
-export SECRET_KEY=dev-only
-export DEBUG=True
-python manage.py migrate
-python manage.py ensure_admin
-python manage.py runserver 8082
-```
-
-### 灌入演示数据
-
-想先看看界面效果再录真实资源，可以灌一批示例数据：
-
-```bash
-python manage.py seed_demo            # 12 条示例资源 + 分类 + 标签 + 下载链接 + 更新日志 + 评论
-python manage.py seed_demo --reset    # 先清空已有资源再灌
-```
-
-演示账号是 `demo` / `demo12345`，它会自动收藏全部示例资源，方便你验证个人中心。
-
-这个命令在生产环境（`DEBUG=False`）默认拒绝执行，避免误操作污染真实数据；确实需要时加 `--force`。
-
-### 运行测试
-
-```bash
-python manage.py test
-```
-
-其中包含两条**防 N+1 回归**的断言：分别比较「2 条资源」与「8 条资源」时的 SQL 查询次数，要求完全相等。标签是多对多，必须用 `prefetch_related` 预取——如果用 `select_related`，这两条测试会立刻失败。
-
-## 常见问题
-
-**容器启动就退出，日志里是 `ImproperlyConfigured: 生产环境（DEBUG=False）必须通过环境变量提供 SECRET_KEY`**
-这是故意的保护。`.env` 里没填 `SECRET_KEY`，填上再 `docker compose up -d` 即可。
-
-**访问出现 400 Bad Request**
-`ALLOWED_HOSTS` 没包含你访问用的域名或 IP。改 `.env` 后 `docker compose up -d` 重建。
-
-**提交表单报 CSRF 错误**
-用域名访问时把 `CSRF_TRUSTED_ORIGINS=https://你的域名` 加进 `.env`。
-
-**上传大文件被拒**
-`.env` 里的 `MAX_UPLOAD_SIZE_MB`（默认 2048，即 2GB）是**单文件硬上限**，在模型层校验，超过会直接报错。改大它之前先确认磁盘够用。
-另外如果前面挂了 nginx 或飞牛网关，还要看它的 `client_max_body_size`，否则请求在到达 Django 之前就被拦了。大文件建议走网盘外链。
-
-**封面图传不上去，提示格式不允许**
-只接受 `jpg / jpeg / png / webp / gif / bmp`。**SVG 是故意挡掉的**——SVG 可以内嵌 `<script>`，而本站的 media 与站点同源，直接打开上传的 SVG 会执行其中的脚本，等于给自己开后门。需要矢量图请先转成 PNG。
-
-**本地文件的下载速度慢**
-默认由 Django（gunicorn）提供 `/media/` 与下载流。如果前置了 nginx，把 `SERVE_MEDIA=False` 并在 nginx 里直接 `location /media/ { alias ...; }`，性能更好。
-
-**SQLite 会不会被并发写锁住**
-不会。已开启 WAL 模式 + 20 秒 `busy_timeout`，代码里也避免了长事务。本项目规模（几百资源、几十用户）远未触及瓶颈。
-
-**想换端口**
-只改 `docker-compose.yml` 里 `ports` 的左边（宿主机端口），容器内固定 8082。
-
-## 免责声明
-
-本站仅收录来自官方或可信来源的软件，仅供学习交流使用，请勿用于商业用途。如有侵权请联系删除。
+- [x] 分支 `SaaSUI`
+- [x] 未登录只见公开软件；非公开详情 / 下载返回 404
+- [x] 注册页面与 API 返回 404，前台无注册入口
+- [x] 仅管理员可登录；非管理员账号停用
+- [x] 首次部署打印管理员初始密码，首次登录强制改密
+- [x] 搜索 + 标签 + 分页组合正常，服务端查询
+- [x] 首页每页 20/24/30，图片懒加载与缩略图
+- [x] 后台站点设置修改 slogan 后首页生效
+- [x] 后台无权限管理 / 组管理菜单、路由、API
+- [x] 迁移前自动备份；`is_published` 重命名为 `is_public` 保留数据
